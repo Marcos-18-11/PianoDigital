@@ -1,6 +1,7 @@
 package com.dam.audiodigital_tfg;
 
 import com.dam.audiodigital_tfg.audio.MetronomeEngine;
+import com.dam.audiodigital_tfg.audio.MidiEngine;
 import javafx.fxml.FXML;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -15,20 +16,27 @@ public class MetronomeController {
     private MetronomeEngine engine;
     private boolean isPlaying = false;
 
+    // NUEVO: Método para inyectar el motor principal desde VirtualKeyboard
+    public void setMidiEngine(MidiEngine midiEngine) {
+        // Creamos el metrónomo dándole el canal de percusión
+        this.engine = new MetronomeEngine(midiEngine.getPercussionChannel());
+    }
+
     @FXML
     public void initialize() {
-        engine = new MetronomeEngine();
-
-        // Conectar el slider con la etiqueta y el motor
         bpmSlider.valueProperty().addListener((observable, oldValue, newValue) -> {
             int currentBpm = newValue.intValue();
             bpmLabel.setText("BPM: " + currentBpm);
-            engine.setBpm(currentBpm);
+            if (engine != null) {
+                engine.setBpm(currentBpm);
+            }
         });
     }
 
     @FXML
     private void togglePlay() {
+        if (engine == null) return; // Seguridad extra
+
         if (isPlaying) {
             engine.stop();
             playButton.setText("▶ PLAY");
@@ -40,4 +48,10 @@ public class MetronomeController {
         }
         isPlaying = !isPlaying;
     }
+    public void stopEngine() {
+        if (engine != null) {
+            engine.stop();
+        }
+    }
+
 }

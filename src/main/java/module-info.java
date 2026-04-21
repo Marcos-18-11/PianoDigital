@@ -1,12 +1,15 @@
 module com.dam.audiodigital_tfg {
-    requires javafx.controls;
-    requires javafx.fxml;
-    requires java.sql;
-    requires java.desktop;
+    // REQUIRES: Define las librerías externas que el DAW necesita para funcionar.
+    requires javafx.controls; // Para los botones, sliders y la ventana.
+    requires javafx.fxml;     // Para cargar las vistas diseñadas en Scene Builder.
+    requires java.desktop;    // OBLIGATORIO: Aquí reside la API javax.sound.midi.
+    requires java.sql;        // Para la futura gestión de la base de datos SQLite.
 
-    requires org.controlsfx.controls;
-    requires org.kordamp.ikonli.javafx;
-
+    // OPENS: Da permiso a JavaFX para que "entre" en nuestro paquete.
+    // Sin esto, JavaFX no podría conectar los botones de la vista con el código.
     opens com.dam.audiodigital_tfg to javafx.fxml;
+
+    // EXPORTS: Permite que otros módulos vean nuestras clases.
     exports com.dam.audiodigital_tfg;
+    exports com.dam.audiodigital_tfg.audio;
 }

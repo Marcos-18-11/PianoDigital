@@ -1,32 +1,22 @@
 package com.dam.audiodigital_tfg.audio;
 
-import javax.sound.midi.*;
+import javax.sound.midi.MidiChannel;
 
 public class MetronomeEngine implements Runnable {
-    private boolean isRunning = false;
+    private volatile boolean isRunning = false;
     private int bpm = 120;
-    private int numerator = 4; // Compás de 4/4 por defecto
-    private Synthesizer synth;
+    private int numerator = 4;
+    private int volume = 100; // Por defecto
     private MidiChannel percussionChannel;
 
-    public MetronomeEngine() {
-        try {
-            synth = MidiSystem.getSynthesizer();
-            synth.open();
-            // El canal 9 (índice 9 de un array de 0 a 15) es el canal de percusión estándar en MIDI
-            percussionChannel = synth.getChannels()[9];
-        } catch (MidiUnavailableException e) {
-            System.err.println("Error al cargar el sintetizador MIDI: " + e.getMessage());
-        }
+    // Ya no crea un Sintetizador, se lo pasan por aquí
+    public MetronomeEngine(MidiChannel percussionChannel) {
+        this.percussionChannel = percussionChannel;
     }
 
-    public void setBpm(int bpm) {
-        this.bpm = bpm;
-    }
-
-    public void setNumerator(int numerator) {
-        this.numerator = numerator;
-    }
+    public void setBpm(int bpm) { this.bpm = bpm; }
+    public void setNumerator(int numerator) { this.numerator = numerator; }
+    public void setVolume(int volume) { this.volume = volume; }
 
     public void start() {
         if (!isRunning) {
@@ -35,27 +25,23 @@ public class MetronomeEngine implements Runnable {
         }
     }
 
-    public void stop() {
-        isRunning = false;
-    }
+    public void stop() { isRunning = false; }
 
     @Override
     public void run() {
         int beatCount = 0;
-
         while (isRunning) {
             long startTime = System.nanoTime();
 
-            // Lógica de sonido: El primer golpe es fuerte (Woodblock alto), los demás son suaves
-            if (beatCount == 0) {
-                percussionChannel.noteOn(76, 127); // Nota 76, Velocidad (Volumen) Máxima
-            } else {
-                percussionChannel.noteOn(77, 90);  // Nota 77, Velocidad Media
+            if (percussionChannel != null) {
+                if (beatCount == 0) {
+                    percussionChannel.noteOn(76, volume); // Fuerte
+                } else {
+                    percussionChannel.noteOn(77, Math.max(0, volume - 30)); // Suave
+                }
             }
 
             beatCount = (beatCount + 1) % numerator;
-
-            // Calcular cuánto debe esperar este hilo según los BPM
             long msPerBeat = (long) (60000.0 / bpm);
             long sleepTime = msPerBeat - ((System.nanoTime() - startTime) / 1000000);
 

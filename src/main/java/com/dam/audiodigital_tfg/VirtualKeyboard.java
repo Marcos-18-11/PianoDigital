@@ -16,44 +16,45 @@ import javafx.stage.Stage;
 import java.util.HashMap;
 import java.util.Map;
 
-
 public class VirtualKeyboard extends Application {
 
     private MidiEngine midiEngine;
+    // NUEVO: Guardamos la referencia al controlador para poder detenerlo al cerrar
+    private MetronomeController metroController;
 
-    private int baseMidiNote=60;
-    private final String WHITE_KEY_STYLE="-fx-background-color: white; -fx-border-color: black; -fx-cursor: hand;";
+    private int baseMidiNote = 60;
+    private final String WHITE_KEY_STYLE = "-fx-background-color: white; -fx-border-color: black; -fx-cursor: hand;";
     private final String BLACK_KEY_STYLE = "-fx-background-color: black; -fx-text-fill: white; -fx-cursor: hand;";
 
-    private static final Map<Integer, String> OCTAVE_ESTRUCTURE=new HashMap<>();
+    private static final Map<Integer, String> OCTAVE_ESTRUCTURE = new HashMap<>();
 
     static {
-
-        OCTAVE_ESTRUCTURE.put(0,"Do");
-        OCTAVE_ESTRUCTURE.put(1,"Do#");
-        OCTAVE_ESTRUCTURE.put(2,"Re");
-        OCTAVE_ESTRUCTURE.put(3,"Re#");
-        OCTAVE_ESTRUCTURE.put(4,"Mi");
-        OCTAVE_ESTRUCTURE.put(5,"Fa");
-        OCTAVE_ESTRUCTURE.put(6,"Fa#");
-        OCTAVE_ESTRUCTURE.put(7,"Sol");
-        OCTAVE_ESTRUCTURE.put(8,"Sol#");
-        OCTAVE_ESTRUCTURE.put(9,"La");
-        OCTAVE_ESTRUCTURE.put(10,"La#");
-        OCTAVE_ESTRUCTURE.put(11,"Si");
-
-
+        OCTAVE_ESTRUCTURE.put(0, "Do");
+        OCTAVE_ESTRUCTURE.put(1, "Do#");
+        OCTAVE_ESTRUCTURE.put(2, "Re");
+        OCTAVE_ESTRUCTURE.put(3, "Re#");
+        OCTAVE_ESTRUCTURE.put(4, "Mi");
+        OCTAVE_ESTRUCTURE.put(5, "Fa");
+        OCTAVE_ESTRUCTURE.put(6, "Fa#");
+        OCTAVE_ESTRUCTURE.put(7, "Sol");
+        OCTAVE_ESTRUCTURE.put(8, "Sol#");
+        OCTAVE_ESTRUCTURE.put(9, "La");
+        OCTAVE_ESTRUCTURE.put(10, "La#");
+        OCTAVE_ESTRUCTURE.put(11, "Si");
     }
 
     @Override
     public void init() {
-        //
         midiEngine = new MidiEngine();
         midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_PIANO);
     }
 
     @Override
     public void start(Stage primaryStage) throws Exception {
+
+        // ==========================================
+        // 1. CONSTRUIMOS EL TECLADO (Parte Inferior)
+        // ==========================================
         BorderPane root = new BorderPane();
         root.setPadding(new Insets(20));
 
@@ -63,80 +64,84 @@ public class VirtualKeyboard extends Application {
         Label titleLabel = new Label("Virtual Keyboard");
         titleLabel.setStyle("-fx-font-size: 24px; -fx-font-weight: bold;");
 
-        ComboBox<String> instrumentSelector= new ComboBox<>();
+        ComboBox<String> instrumentSelector = new ComboBox<>();
         instrumentSelector.getItems().addAll("Piano", "Guitarra");
-
         instrumentSelector.setValue("Piano");
         instrumentSelector.setStyle("-fx-font-size: 14px; -fx-cursor: hand;");
 
-        instrumentSelector.setOnAction(event->{
-            String selected=instrumentSelector.getValue();
-            if("Piano".equals(selected)){
+        instrumentSelector.setOnAction(event -> {
+            String selected = instrumentSelector.getValue();
+            if ("Piano".equals(selected)) {
                 midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_PIANO);
             } else if ("Guitarra".equals(selected)) {
                 midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_GUITAR);
             }
         });
-        topPane.getChildren().addAll(titleLabel,instrumentSelector);
+        topPane.getChildren().addAll(titleLabel, instrumentSelector);
         root.setTop(topPane);
 
-        HBox keyboardContainer=new HBox(1);
+        HBox keyboardContainer = new HBox(1);
         keyboardContainer.setAlignment(Pos.CENTER);
-        keyboardContainer.setPadding(new Insets(20, 0,20,0));
+        keyboardContainer.setPadding(new Insets(20, 0, 20, 0));
 
-        createKeyboard(keyboardContainer,2);
+        createKeyboard(keyboardContainer, 2);
         root.setCenter(keyboardContainer);
 
-        VBox octaveControls=new VBox(10);
-
+        VBox octaveControls = new VBox(10);
         octaveControls.setAlignment(Pos.CENTER);
-        octaveControls.setPadding(new Insets(0,0,0,20));
+        octaveControls.setPadding(new Insets(0, 0, 0, 20));
 
-        Label octaveLabel=new Label("Octava: C4");
+        Label octaveLabel = new Label("Octava: C4");
         octaveLabel.setStyle("-fx-font-weight: bold;");
 
-        Button upButton=new Button("Up");
+        Button upButton = new Button("Up");
         upButton.setPrefSize(40, 40);
         upButton.setOnAction(actionEvent -> {
-            if ((baseMidiNote<=96)){
-                baseMidiNote+=12;
-                octaveLabel.setText("Octava C" + (baseMidiNote/12-1));
+            if ((baseMidiNote <= 96)) {
+                baseMidiNote += 12;
+                octaveLabel.setText("Octava C" + (baseMidiNote / 12 - 1));
             }
         });
 
         Button downButton = new Button("Down");
         downButton.setPrefSize(40, 40);
         downButton.setOnAction(event -> {
-
             if (baseMidiNote - 12 >= 0) {
                 baseMidiNote -= 12;
-                octaveLabel.setText("Octava: C" + (baseMidiNote/12 - 1));
+                octaveLabel.setText("Octava: C" + (baseMidiNote / 12 - 1));
             }
         });
 
         octaveControls.getChildren().addAll(upButton, octaveLabel, downButton);
         root.setRight(octaveControls);
 
-       // Scene scene=new Scene(root, 1000, 500);
-
-        primaryStage.setTitle("Music Box");
-      // primaryStage.setScene(scene);
-        primaryStage.show();
-
+        // ==========================================
+        // 2. CARGAMOS EL METRÓNOMO (Parte Superior)
+        // ==========================================
         javafx.fxml.FXMLLoader fxmlLoader = new javafx.fxml.FXMLLoader(VirtualKeyboard.class.getResource("MetronomeView.fxml"));
         javafx.scene.Parent metronomeRoot = fxmlLoader.load();
 
-        // 2. Creamos el SplitPane Vertical
+        // NUEVO: Guardamos la referencia en la variable global
+        this.metroController = fxmlLoader.getController();
+        if (this.metroController != null) {
+            this.metroController.setMidiEngine(this.midiEngine);
+        }
+
+        // ==========================================
+        // 3. ENSAMBLAMOS TODO EN EL SPLITPANE
+        // ==========================================
         javafx.scene.control.SplitPane splitPane = new javafx.scene.control.SplitPane();
         splitPane.setOrientation(javafx.geometry.Orientation.VERTICAL);
 
-        // 3. Añadimos el Metrónomo (arriba) y el Teclado (abajo)
+        // Añadimos el Metrónomo (arriba) y el Teclado (abajo)
         splitPane.getItems().addAll(metronomeRoot, root);
 
-        // 4. Ajustamos la posición inicial de la barra separadora (30% arriba, 70% abajo)
+        // Ajustamos la posición inicial de la barra separadora
         splitPane.setDividerPositions(0.3f);
 
-        // 5. Metemos el SplitPane en la Escena (he subido un poco la altura total a 700)
+        // ==========================================
+        // 4. MOSTRAMOS LA VENTANA FINAL
+        // ==========================================
         Scene scene = new Scene(splitPane, 1000, 700);
 
         primaryStage.setTitle("Music Box DAW");
@@ -144,28 +149,28 @@ public class VirtualKeyboard extends Application {
         primaryStage.show();
     }
 
-    private void createKeyboard(HBox container, int numOctaves){
+    private void createKeyboard(HBox container, int numOctaves) {
         container.getChildren().clear();
 
-        for(int octave=0;octave < numOctaves; octave++){
-            for(int noteInOctave=0;noteInOctave<12;noteInOctave++){
-                String noteName= OCTAVE_ESTRUCTURE.get(noteInOctave);
-                boolean isBlack=noteName.contains("#");
+        for (int octave = 0; octave < numOctaves; octave++) {
+            for (int noteInOctave = 0; noteInOctave < 12; noteInOctave++) {
+                String noteName = OCTAVE_ESTRUCTURE.get(noteInOctave);
+                boolean isBlack = noteName.contains("#");
 
                 Button key = new Button(noteName);
 
-                if(isBlack){
+                if (isBlack) {
                     key.setStyle(BLACK_KEY_STYLE);
-                    key.setPrefSize(35,125);
-                } else{
+                    key.setPrefSize(35, 125);
+                } else {
                     key.setStyle(WHITE_KEY_STYLE);
                     key.setPrefSize(50, 200);
                 }
 
-                int finalMidiNote=(octave*12) + noteInOctave;
+                int finalMidiNote = (octave * 12) + noteInOctave;
 
                 key.setOnMousePressed(mouseEvent -> {
-                    midiEngine.playNote(baseMidiNote +finalMidiNote,100,500);
+                    midiEngine.playNote(baseMidiNote + finalMidiNote, 100, 500);
                 });
                 container.getChildren().add(key);
             }
@@ -174,15 +179,18 @@ public class VirtualKeyboard extends Application {
 
     @Override
     public void stop() {
+        // NUEVO: Apagamos el hilo del metrónomo primero
+        if (metroController != null) {
+            metroController.stopEngine();
+        }
+
+        // Luego cerramos el sintetizador principal
         if (midiEngine != null) {
             midiEngine.close();
-
         }
     }
 
     public static void main(String[] args) {
         launch(args);
     }
-
-
 }
