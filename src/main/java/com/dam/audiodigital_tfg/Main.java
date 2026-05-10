@@ -12,8 +12,9 @@ public class Main {
         midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_PIANO);
 
         // Octava C4
-
-        midiEngine.playNote(60, 100, 500);
+        /*
+        *
+        * midiEngine.playNote(60, 100, 500);
         midiEngine.playNote(61, 100, 500);
         midiEngine.playNote(62, 100, 500);
         midiEngine.playNote(63, 100, 500);
@@ -51,6 +52,9 @@ public class Main {
         midiEngine.playNote(70, 100, 1000);
         midiEngine.playNote(71, 100, 1000);
         midiEngine.playNote(72, 100, 1000);
+        *
+        * */
+
 
         midiEngine.close();
     }
