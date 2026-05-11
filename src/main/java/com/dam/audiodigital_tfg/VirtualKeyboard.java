@@ -10,10 +10,7 @@ import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
 import javafx.scene.Parent;
 import javafx.scene.Scene;
-import javafx.scene.control.Button;
-import javafx.scene.control.ComboBox;
-import javafx.scene.control.Label;
-import javafx.scene.control.SplitPane;
+import javafx.scene.control.*;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
@@ -83,105 +80,274 @@ public class VirtualKeyboard extends Application {
 
         // 1. Selector de Instrumentos
         ComboBox<String> instrumentSelector = new ComboBox<>();
-        instrumentSelector.getItems().addAll("Piano", "Guitarra");
+        instrumentSelector.getItems().addAll(
+                "Piano Acústico", "Piano Eléctrico", "Órgano", "Órgano de Iglesia",
+                "Guitarra Acústica", "Guitarra Jazz", "Bajo Eléctrico", "Contrabajo",
+                "Viola", "Orquesta", "Coro", "Trompeta", "Cuerno Francés",
+                "Saxofón", "Flauta", "Campanas Tubulares", "Sitar",
+                "Synth Lead", "Warm Pad", "Brightness"
+        );
         instrumentSelector.setValue("Piano");
         instrumentSelector.setStyle("-fx-font-size: 14px; -fx-cursor: hand;");
 
+
+        // 2. Switch conectado a tus constantes de MidiEngine
         instrumentSelector.setOnAction(event -> {
             String selected = instrumentSelector.getValue();
-            if ("Piano".equals(selected)) {
-                midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_PIANO);
-            } else if ("Guitarra".equals(selected)) {
-                midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_GUITAR);
+            switch (selected) {
+                case "Piano Acústico":
+                    midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_PIANO);
+                    break;
+                case "Piano Eléctrico":
+                    midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_PIANO_ELECTRIC);
+                    break;
+                case "Órgano":
+                    midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_ORGAN);
+                    break;
+                case "Órgano de Iglesia":
+                    midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_CHURCH_ORGAN);
+                    break;
+                case "Guitarra Acústica":
+                    midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_GUITAR);
+                    break;
+                case "Guitarra Jazz":
+                    midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_JAZZ_GUITAR);
+                    break;
+                case "Bajo Eléctrico":
+                    midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_GELECTRIC_BASS);
+                    break;
+                case "Contrabajo":
+                    midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_CONTRABASS);
+                    break;
+                case "Viola":
+                    midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_VIOLA);
+                    break;
+                case "Orquesta":
+                    midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_ORCHESTA);
+                    break;
+                case "Coro":
+                    midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_CHOIR);
+                    break;
+                case "Trompeta":
+                    midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_TRUMPET);
+                    break;
+                case "Corno Francés":
+                    midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_FRENCH_HORN);
+                    break;
+                case "Saxofón":
+                    midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_SAX);
+                    break;
+                case "Flauta":
+                    midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_FLUTE);
+                    break;
+                case "Campanas Tubulares":
+                    midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_TUBULAR_BELLS);
+                    break;
+                case "Sitar":
+                    midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_SITAR);
+                    break;
+                case "Synth Lead":
+                    midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_SINTH_LEAD);
+                    break;
+                case "Warm Pad":
+                    midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_WARM_PAD);
+                    break;
+                case "Brightness":
+                    midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_BRIGHTNESS);
+                    break;
             }
         });
 
-        // 2. Botón de Importar
-        Button importBtn = new Button("📂 Importar SoundFont (.sf2)");
+        // En tu archivo Controller.java
+        ToggleButton btnSaturationOn = new ToggleButton("🔥 Saturación (C++)");
+        // Le damos un estilo inicial
+        btnSaturationOn.setStyle("-fx-background-color: #555555; -fx-text-fill: white; -fx-cursor: hand;");
+
+        // Listener para activar/desactivar y cambiar el color
+        btnSaturationOn.setOnAction(event -> {
+            boolean isOn = btnSaturationOn.isSelected();
+            midiEngine.setSaturationEnabled(isOn);
+
+            if (isOn) {
+                // Si está encendido, lo ponemos rojo/naranja
+                btnSaturationOn.setStyle("-fx-background-color: #ff5722; -fx-text-fill: white; -fx-font-weight: bold; -fx-cursor: hand;");
+            } else {
+                // Si está apagado, vuelve a gris
+                btnSaturationOn.setStyle("-fx-background-color: #555555; -fx-text-fill: white; -fx-cursor: hand;");
+            }
+        });
+
+        // --- 1. REVERB (Slider) ---
+        // --- 1. REVERB (Slider) ---
+        VBox reverbBox = new VBox(5);
+        reverbBox.setAlignment(Pos.CENTER);
+        Label lblRev = new Label("🌊 Reverb");
+        lblRev.setStyle("-fx-font-weight: bold;");
+        Slider revSlider = new Slider(0, 127, 0);
+        revSlider.setPrefWidth(100);
+
+        // 🚨 CAMBIO AQUÍ: Ahora enviamos el nivel exacto
+        revSlider.valueProperty().addListener((obs, old, val) -> {
+            midiEngine.setReverbLevel(val.intValue());
+        });
+
+        reverbBox.getChildren().addAll(lblRev, revSlider);
+
+        // --- 2. SATURACIÓN C++ (Botón y Slider) ---
+        VBox satBox = new VBox(5);
+        satBox.setAlignment(Pos.CENTER);
+        ToggleButton btnSaturation = new ToggleButton("🔥 Saturación");
+        btnSaturation.setStyle("-fx-background-color: #555555; -fx-text-fill: white; -fx-cursor: hand;");
+
+        Slider satSlider = new Slider(0, 10, 0); // Lo empezamos en 0
+        satSlider.setPrefWidth(100);
+
+        // 🚨 CAMBIO AQUÍ: Ahora enviamos la fuerza exacta (Drive)
+        satSlider.valueProperty().addListener((obs, old, val) -> {
+            midiEngine.setSaturationDrive(val.floatValue());
+
+            // Efecto visual: Si subimos el slider, el botón se enciende solo
+            if (val.floatValue() > 0.1) {
+                btnSaturation.setSelected(true);
+                btnSaturation.setStyle("-fx-background-color: #ff5722; -fx-text-fill: white; -fx-font-weight: bold;");
+            } else {
+                btnSaturation.setSelected(false);
+                btnSaturation.setStyle("-fx-background-color: #555555; -fx-text-fill: white;");
+            }
+        });
+
+        // (Mantenemos el botón por si queremos apagarlo de golpe sin mover el slider)
+        btnSaturation.setOnAction(event -> {
+            boolean isOn = btnSaturation.isSelected();
+            midiEngine.setSaturationEnabled(isOn);
+            btnSaturation.setStyle(isOn ? "-fx-background-color: #ff5722; -fx-text-fill: white; -fx-font-weight: bold;" : "-fx-background-color: #555555; -fx-text-fill: white;");
+        });
+
+        satBox.getChildren().addAll(btnSaturation, satSlider);
+
+        // --- 3. DELAY (Botón) ---
+        ToggleButton btnDelay = new ToggleButton("⏱️ Delay");
+        btnDelay.setStyle("-fx-background-color: #555555; -fx-text-fill: white; -fx-cursor: hand;");
+        btnDelay.setOnAction(event -> {
+            boolean isOn = btnDelay.isSelected();
+            midiEngine.setDelayEnabled(isOn);
+            btnDelay.setStyle(isOn ? "-fx-background-color: #00E676; -fx-text-fill: black; -fx-font-weight: bold;" : "-fx-background-color: #555555; -fx-text-fill: white;");
+        });
+
+        // --- 4. IMPORTAR ---
+        Button importBtn = new Button("📂 Importar (.sf2)");
         importBtn.setStyle("-fx-background-color: #FF9800; -fx-text-fill: white; -fx-font-weight: bold; -fx-cursor: hand;");
         importBtn.setOnAction(e -> {
             javafx.stage.FileChooser fileChooser = new javafx.stage.FileChooser();
-            fileChooser.setTitle("Importar Banco de Sonidos (SoundFont)");
-            fileChooser.getExtensionFilters().addAll(
-                    new javafx.stage.FileChooser.ExtensionFilter("Bancos de Sonido", "*.sf2", "*.dls", "*.rmf")
-            );
-
+            fileChooser.getExtensionFilters().add(new javafx.stage.FileChooser.ExtensionFilter("SoundFont", "*.sf2"));
             java.io.File selectedFile = fileChooser.showOpenDialog(primaryStage);
+            if (selectedFile != null) midiEngine.loadCustomSoundbank(selectedFile);
+        });
 
-            if (selectedFile != null) {
-                midiEngine.loadCustomSoundbank(selectedFile);
-                titleLabel.setText("Cargado: " + selectedFile.getName());
+        // 🚨 ENSAMBLAMOS TODO UNA SOLA VEZ 🚨
+        controlsHBox.getChildren().clear();
+        controlsHBox.getChildren().addAll(instrumentSelector, satBox, reverbBox, btnDelay, importBtn);
+
+        // Metemos el título y la caja en el panel superior
+        topPane.getChildren().addAll(titleLabel, controlsHBox);
+        root.setTop(topPane);
+// LEFT PANEL (Mezclador 4 Pistas con Sliders)
+// =========================
+        VBox leftPane = new VBox(15); // <-- Aquí se define el leftPane
+        leftPane.setAlignment(Pos.TOP_CENTER);
+        leftPane.setPadding(new Insets(20));
+        leftPane.setStyle("-fx-border-color: #cccccc; -fx-border-width: 0 1 0 0; -fx-background-color: #2b2b2b;");
+
+        Label mixerLabel = new Label("MIXER");
+        mixerLabel.setStyle("-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 16px;");
+        leftPane.getChildren().add(mixerLabel);
+
+// Mapa para que el hardware sepa qué slider mover
+        Map<Integer, Slider> vSliders = new HashMap<>();
+
+        for (int i = 0; i < 4; i++) {
+            int channelIdx = i;
+            VBox channelRack = new VBox(8); // Aumentamos un poco el espacio
+            channelRack.setAlignment(Pos.CENTER);
+            channelRack.setPadding(new Insets(10));
+            channelRack.setStyle("-fx-background-color: #3c3f41; -fx-background-radius: 8; -fx-border-color: #555;");
+
+            Label lblTrack = new Label("PISTA " + (i + 1));
+            lblTrack.setStyle("-fx-text-fill: #00ffcc; -fx-font-weight: bold; -fx-font-size: 11px;");
+
+            // 1. Slider de Volumen
+            Slider volSlider = new Slider(0, 127, 100);
+            volSlider.setOrientation(Orientation.VERTICAL);
+            volSlider.setPrefHeight(120);
+            int ccMap = (i == 0) ? 82 : (i == 1) ? 83 : (i == 2) ? 85 : 17;
+            vSliders.put(ccMap, volSlider);
+            volSlider.valueProperty().addListener((obs, old, val) -> midiEngine.setChannelVolume(channelIdx, val.intValue()));
+
+            // 2. Selector de Sesión
+            ComboBox<com.dam.audiodigital_tfg.db.SessionDAO.SessionInfo> sessionSelector = new ComboBox<>();
+            sessionSelector.setPromptText("Cargar...");
+            sessionSelector.setPrefWidth(100);
+            sessionSelector.setStyle("-fx-font-size: 10px;");
+
+            // Contenedor temporal para las notas cargadas en este canal específico
+            final java.util.List<com.dam.audiodigital_tfg.RecordedNote>[] loadedNotes = new java.util.List[1];
+
+            sessionSelector.setOnShowing(e -> {
+                sessionSelector.getItems().setAll(new com.dam.audiodigital_tfg.db.SessionDAO().getAllSessions());
+            });
+
+            // 3. Botón de PLAY para este canal
+            Button playTrackBtn = new Button("▶");
+            playTrackBtn.setDisable(true); // Deshabilitado hasta que carguemos algo
+            playTrackBtn.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold;");
+            playTrackBtn.setPrefWidth(100);
+
+            // Cuando seleccionamos una sesión en el ComboBox...
+            sessionSelector.setOnAction(e -> {
+                var selected = sessionSelector.getValue();
+                if (selected != null) {
+                    loadedNotes[0] = new com.dam.audiodigital_tfg.db.SessionDAO().getNotesBySession(selected.id);
+                    playTrackBtn.setDisable(false); // Ya hay notas, habilitamos el Play
+                    playTrackBtn.setStyle("-fx-background-color: #2196F3; -fx-text-fill: white;"); // Azul: "Listo para sonar"
+                }
+            });
+
+            // Acción del botón Play
+            playTrackBtn.setOnAction(e -> {
+                if (loadedNotes[0] != null && !loadedNotes[0].isEmpty()) {
+                    midiEngine.playSession(loadedNotes[0], channelIdx);
+
+                    // Efecto visual rápido de reproducción
+                    playTrackBtn.setText("⏳");
+                    new java.util.Timer().schedule(new java.util.TimerTask() {
+                        @Override
+                        public void run() {
+                            javafx.application.Platform.runLater(() -> playTrackBtn.setText("▶"));
+                        }
+                    }, 1000);
+                }
+            });
+
+            // Añadimos todo al rack del canal (Orden: Nombre -> Slider -> Combo -> Play)
+            channelRack.getChildren().addAll(lblTrack, volSlider, sessionSelector, playTrackBtn);
+            leftPane.getChildren().add(channelRack);
+        }
+
+// Conectamos el listener del hardware
+        midiEngine.setControlChangeListener((cc, value) -> {
+            if (vSliders.containsKey(cc)) {
+                vSliders.get(cc).setValue(value);
             }
         });
 
-        // Metemos el selector y el botón en la caja horizontal
-        controlsHBox.getChildren().addAll(instrumentSelector, importBtn);
+        root.setLeft(leftPane); // <-- Aquí lo metes en el BorderPane
 
-        // Metemos el título y la caja de controles en el panel superior
-        topPane.getChildren().addAll(titleLabel, controlsHBox);
-        root.setTop(topPane);
-
-
-        // =========================
-        // LEFT PANEL (Mezclador 4 Pistas)
-        // =========================
-        VBox leftPane = new VBox(15);
-        leftPane.setAlignment(Pos.TOP_CENTER);
-        leftPane.setPadding(new Insets(20));
-        leftPane.setStyle("-fx-border-color: #cccccc; -fx-border-width: 0 1 0 0;"); // Línea divisoria a la derecha
-
-        Label mixerLabel = new Label("Mezclador");
-        mixerLabel.setStyle("-fx-font-weight: bold; -fx-font-size: 16px;");
-        leftPane.getChildren().add(mixerLabel);
-
-        // Creamos 4 botones con un bucle
-        for (int i = 1; i <= 4; i++) {
-            final int trackNumber = i; // Necesitamos que sea final para usarlo dentro del evento
-
-            Button loadTrackBtn = new Button("📁 Pista " + trackNumber);
-            loadTrackBtn.setPrefWidth(100);
-            loadTrackBtn.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold;");
-
-            loadTrackBtn.setOnAction(e -> {
-                com.dam.audiodigital_tfg.db.SessionDAO dao = new com.dam.audiodigital_tfg.db.SessionDAO();
-                java.util.List<com.dam.audiodigital_tfg.db.SessionDAO.SessionInfo> sessions = dao.getAllSessions();
-
-                if (sessions.isEmpty()) {
-                    javafx.scene.control.Alert alert = new javafx.scene.control.Alert(javafx.scene.control.Alert.AlertType.INFORMATION);
-                    alert.setTitle("Sin sesiones");
-                    alert.setHeaderText(null);
-                    alert.setContentText("Aún no tienes sesiones guardadas. ¡Graba algo primero!");
-                    alert.showAndWait();
-                    return;
-                }
-
-                // Creamos una ventana de diálogo con un desplegable (ComboBox)
-                javafx.scene.control.ChoiceDialog<com.dam.audiodigital_tfg.db.SessionDAO.SessionInfo> dialog =
-                        new javafx.scene.control.ChoiceDialog<>(sessions.get(0), sessions);
-                dialog.setTitle("Cargar en Pista " + trackNumber);
-                dialog.setHeaderText("Canal " + trackNumber + " - Volumen mapeado al fader");
-                dialog.setContentText("Selecciona la sesión:");
-
-                // Si el usuario elige una y le da a Aceptar...
-                dialog.showAndWait().ifPresent(selectedSession -> {
-                    java.util.List<com.dam.audiodigital_tfg.RecordedNote> savedNotes = dao.getNotesBySession(selectedSession.id);
-                    if (!savedNotes.isEmpty()) {
-                        System.out.println("Cargando: " + selectedSession.name + " en Canal " + (trackNumber - 1));
-
-                        // Cambiamos el texto del botón para saber qué está cargado
-                        loadTrackBtn.setText("▶ " + selectedSession.name);
-
-                        // Reproducimos
-                        midiEngine.playSession(savedNotes, trackNumber - 1);
-                    }
-                });
-            });
-
-            leftPane.getChildren().add(loadTrackBtn);
-        }
-
-        // Anclamos este panel a la izquierda de la pantalla
-        root.setLeft(leftPane);
+// 🚨 CONEXIÓN HARDWARE -> SOFTWARE 🚨
+        midiEngine.setControlChangeListener((cc, value) -> {
+            if (vSliders.containsKey(cc)) {
+                vSliders.get(cc).setValue(value); // El fader físico mueve el slider virtual
+            }
+        });
 
 
         // =========================
