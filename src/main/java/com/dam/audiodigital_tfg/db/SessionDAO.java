@@ -96,4 +96,21 @@ public class SessionDAO {
             e.printStackTrace();
         }
     }
+    // Método para borrar una sesión y sus notas asociadas
+    public void deleteSession(int sessionId) {
+        String sql = "DELETE FROM sessions WHERE id = ?";
+        try (java.sql.Connection conn = DatabaseManager.getConnection();
+             java.sql.PreparedStatement pstmt = conn.prepareStatement(sql)) {
+
+            pstmt.setInt(1, sessionId);
+            int filasBorradas = pstmt.executeUpdate();
+
+            if (filasBorradas > 0) {
+                System.out.println("✅ Sesión con ID " + sessionId + " borrada correctamente.");
+            }
+        } catch (java.sql.SQLException e) {
+            System.err.println("❌ Error al borrar la sesión: " + e.getMessage());
+        }
+    }
+
 }

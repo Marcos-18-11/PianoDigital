@@ -8,8 +8,18 @@ import java.util.concurrent.CompletableFuture;
 
 public class MidiEngine {
 
+    private com.dam.audiodigital_tfg.MappingManager mappingManager;
+
     private Synthesizer synthesizer;
     private MidiChannel[] channels;
+    private CppAudioBridge cppBridge = new CppAudioBridge();
+
+    private boolean isSaturationEnabled = false; // Por defecto apagado
+    private float saturationDrive = 3.0f; // La "fuerza" del efecto
+
+    // Controles de Delay
+    private boolean isDelayEnabled = false;
+    private int delayTimeMs = 350; // Tiempo en milisegundos que tarda el "eco"
 
     // ================= Variables del Secuenciador =================
     private boolean isRecording = false;
@@ -18,9 +28,29 @@ public class MidiEngine {
 
     private java.util.Map<Integer, Long> activeNotes = new java.util.HashMap<>();
 
+    // ==========================================
+// CONSTANTES DE INSTRUMENTOS (General MIDI)
+// ==========================================
     public static final int INSTRUMENT_ACOUSTIC_PIANO = 0;
+    public static final int INSTRUMENT_ACOUSTIC_PIANO_ELECTRIC = 5;
+    public static final int INSTRUMENT_ACOUSTIC_ORGAN = 19;
+    public static final int INSTRUMENT_ACOUSTIC_CHURCH_ORGAN = 20;
     public static final int INSTRUMENT_ACOUSTIC_GUITAR = 25;
-
+    public static final int INSTRUMENT_ACOUSTIC_JAZZ_GUITAR = 27;
+    public static final int INSTRUMENT_ACOUSTIC_GELECTRIC_BASS = 34;
+    public static final int INSTRUMENT_ACOUSTIC_CONTRABASS = 44;
+    public static final int INSTRUMENT_ACOUSTIC_VIOLA = 42;
+    public static final int INSTRUMENT_ACOUSTIC_ORCHESTA = 56;
+    public static final int INSTRUMENT_ACOUSTIC_CHOIR = 53;
+    public static final int INSTRUMENT_ACOUSTIC_TRUMPET = 57;
+    public static final int INSTRUMENT_ACOUSTIC_FRENCH_HORN = 61;
+    public static final int INSTRUMENT_ACOUSTIC_SAX = 66;
+    public static final int INSTRUMENT_ACOUSTIC_FLUTE = 74;
+    public static final int INSTRUMENT_ACOUSTIC_TUBULAR_BELLS = 15;
+    public static final int INSTRUMENT_ACOUSTIC_SITAR = 105;
+    public static final int INSTRUMENT_ACOUSTIC_SINTH_LEAD = 83;
+    public static final int INSTRUMENT_ACOUSTIC_WARM_PAD = 90;
+    public static final int INSTRUMENT_ACOUSTIC_BRIGHTNESS = 101;
     public MidiEngine() {
         try {
             synthesizer = MidiSystem.getSynthesizer();
@@ -34,11 +64,51 @@ public class MidiEngine {
             e.printStackTrace();
         }
     }
-
+    public void setSaturationEnabled(boolean enabled) {
+        this.isSaturationEnabled = enabled;
+        System.out.println("Efecto de Saturación C++: " + (enabled ? "ENCENDIDO" : "APAGADO"));
+    }
     public void changeInstrument(int instrumentProgram) {
         if (channels != null && channels.length > 0) {
             channels[0].programChange(instrumentProgram);
             System.out.println("Instrumento cambiado al programa: " + instrumentProgram);
+        }
+    }
+
+    // Interfaz para avisar a la UI cuando el hardware mueve un fader
+    public interface ControlChangeListener {
+        void onControlChange(int ccNumber, int value);
+    }
+
+    private ControlChangeListener controlChangeListener;
+
+    public void setControlChangeListener(ControlChangeListener listener) {
+        this.controlChangeListener = listener;
+    }
+
+    public void setDelayEnabled(boolean enabled) {
+        this.isDelayEnabled = enabled;
+        System.out.println("⏱️ Efecto Delay: " + (enabled ? "ENCENDIDO" : "APAGADO"));
+    }
+    public void setMappingManager(com.dam.audiodigital_tfg.MappingManager mm) {
+        this.mappingManager = mm;
+    }
+
+    // Listener para avisar a la interfaz de que se ha disparado una acción
+    public interface ActionTriggerListener {
+        void onActionTriggered(String actionId);
+        void onMappingSuccess(); // Para que la interfaz quite el borde amarillo
+    }
+
+    private ActionTriggerListener actionListener;
+
+    public void setActionTriggerListener(ActionTriggerListener listener) {
+        this.actionListener = listener;
+    }
+    // Método para cambiar volumen de un canal específico
+    public void setChannelVolume(int channel, int volume) {
+        if (channels != null && channels.length > channel) {
+            channels[channel].controlChange(7, volume); // CC 7 = Volumen
         }
     }
 
@@ -98,14 +168,39 @@ public class MidiEngine {
 
     // --- MÉTODOS DIRECTOS Y SIN LATENCIA ---
     public void noteOn(int noteNumber, int velocity) {
-        if (channels != null && channels.length > 0) {
-            channels[0].noteOn(noteNumber, velocity);
+        // 1. Saturación C++ (Si está activa)
+        int finalVelocity = velocity;
+        if (isSaturationEnabled) {
+            finalVelocity = cppBridge.getSaturatedVelocity(velocity, saturationDrive);
+        }
 
-            // Si estamos grabando, apuntamos en qué milisegundo se empezó a pulsar
-            if (isRecording) {
-                long timeElapsed = System.currentTimeMillis() - recordStartTime;
-                activeNotes.put(noteNumber, timeElapsed);
-            }
+        // 2. Tocamos la nota real
+        if (channels != null && channels.length > 0) {
+            channels[0].noteOn(noteNumber, finalVelocity);
+        }
+
+        // 🚨 3. GRABACIÓN CON TIEMPO RELATIVO 🚨
+        if (isRecording) {
+            // Guardamos exactamente cuántos milisegundos han pasado desde que le dimos a REC
+            long timeElapsed = System.currentTimeMillis() - recordStartTime;
+            activeNotes.put(noteNumber, timeElapsed);
+        }
+
+        // 4. EFECTO DELAY (El Eco)
+        if (isDelayEnabled) {
+            final int echoVelocity = finalVelocity / 2;
+            java.util.concurrent.CompletableFuture.runAsync(() -> {
+                try {
+                    Thread.sleep(delayTimeMs);
+                    if (channels != null && channels.length > 0) {
+                        channels[0].noteOn(noteNumber, echoVelocity);
+                        Thread.sleep(150);
+                        channels[0].noteOff(noteNumber);
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
         }
     }
 
@@ -113,26 +208,51 @@ public class MidiEngine {
         if (channels != null && channels.length > 0) {
             channels[0].noteOff(noteNumber);
 
-            // Si estamos grabando y teníamos esta nota registrada como pulsada...
+            // 🚨 CERRAMOS LA NOTA Y CALCULAMOS LA DURACIÓN REAL 🚨
             if (isRecording && activeNotes.containsKey(noteNumber)) {
-                long startTime = activeNotes.remove(noteNumber); // La sacamos de la memoria temporal
-                long endTime = System.currentTimeMillis() - recordStartTime;
-                int duration = (int) (endTime - startTime); // ¡Calculamos la duración real!
+                long relativeStartTime = activeNotes.remove(noteNumber);
+                long relativeEndTime = System.currentTimeMillis() - recordStartTime;
+                int duration = (int) (relativeEndTime - relativeStartTime);
 
-                // Guardamos la nota completada en la sesión
-                recordedNotes.add(new RecordedNote(startTime, noteNumber, 100, duration, false));
+                // Guardamos la nota usando el tiempo relativo correcto
+                recordedNotes.add(new com.dam.audiodigital_tfg.RecordedNote(relativeStartTime, noteNumber, 100, duration, false));
             }
         }
     }
 
     // Para los Drum Pads (suelen ser golpes cortos o "one-shots", no necesitan duration real)
+    // Para los Drum Pads
     public void playPad(int noteNumber, int velocity) {
-        if (getPercussionChannel() != null) {
+        MidiChannel percChannel = getPercussionChannel();
+        if (percChannel != null) {
+
+            // 1. Saturación C++ (Ideal para bombos y cajas más agresivos)
+            int finalVelocity = velocity;
+            if (isSaturationEnabled) {
+                finalVelocity = cppBridge.getSaturatedVelocity(velocity, saturationDrive);
+            }
+
+            // 2. Grabamos el golpe (usamos la velocidad ya saturada)
             if (isRecording) {
                 long timeElapsed = System.currentTimeMillis() - recordStartTime;
-                recordedNotes.add(new RecordedNote(timeElapsed, noteNumber, velocity, 100, true)); // 100ms fijos
+                recordedNotes.add(new com.dam.audiodigital_tfg.RecordedNote(timeElapsed, noteNumber, finalVelocity, 100, true)); // 100ms fijos
             }
-            getPercussionChannel().noteOn(noteNumber, velocity);
+
+            // 3. Suena el golpe real
+            percChannel.noteOn(noteNumber, finalVelocity);
+
+            // 4. Efecto Delay (Eco en la batería)
+            if (isDelayEnabled) {
+                final int echoVelocity = finalVelocity / 2; // El eco es más suave
+                java.util.concurrent.CompletableFuture.runAsync(() -> {
+                    try {
+                        Thread.sleep(delayTimeMs);
+                        percChannel.noteOn(noteNumber, echoVelocity);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                });
+            }
         }
     }
 
@@ -160,6 +280,43 @@ public class MidiEngine {
         }
     }
 
+    // --- EFECTOS MIDI ESTÁNDAR ---
+    public void setReverbEnabled(boolean enabled) {
+        if (channels != null) {
+            // El nivel MIDI va de 0 a 127. Le ponemos 100 para que se note bastante el "eco"
+            int reverbLevel = enabled ? 100 : 0;
+
+            // CC 91 es el estándar universal MIDI para Reverb Depth (Profundidad de Reverb)
+            channels[0].controlChange(91, reverbLevel);
+
+            System.out.println("🌊 Efecto Reverb (CC 91): " + (enabled ? "ENCENDIDO" : "APAGADO"));
+        }
+    }
+
+    // Ajusta la profundidad real del Reverb (0 a 127)
+    public void setReverbLevel(int level) {
+        if (channels != null && channels.length > 0) {
+            channels[0].controlChange(91, level);
+            if (channels.length > 9) {
+                channels[9].controlChange(91, level); // Reverb para la Batería
+            }// CC 91 = Nivel de Reverb
+        }
+    }
+
+    // Ajusta la fuerza real de la Saturación C++ (0.0f a 10.0f)
+    public void setSaturationDrive(float drive) {
+        // Multiplicamos por 5 o 10 para que el efecto sea "salvaje"
+        // Un drive de 5 en el slider se convertirá en 50 para C++
+        this.saturationDrive = drive * 10.0f;
+
+        this.isSaturationEnabled = (drive > 0.1f);
+
+        // Log para confirmar qué le llega a C++
+        if(isSaturationEnabled) {
+            System.out.println("🔥 Enviando Drive a C++: " + this.saturationDrive);
+        }
+    }
+
     private class ExternalMidiReceiver implements Receiver {
         @Override
         public void send(MidiMessage message, long timeStamp) {
@@ -173,11 +330,33 @@ public class MidiEngine {
                 // 1. GESTIÓN DE NOTAS (Teclas y Pads)
                 if (command == ShortMessage.NOTE_ON) {
                     if (velocityOrValue > 0) {
+
+                        // 🚨 --- INTERCEPTOR DE MAPEO --- 🚨
+                        if (mappingManager != null) {
+                            // A. Si estamos en modo aprender y esperando una tecla...
+                            if (mappingManager.isLearnMode() && mappingManager.getWaitingAction() != null) {
+                                mappingManager.mapMidiKey(data1);
+                                if (actionListener != null) {
+                                    javafx.application.Platform.runLater(() -> actionListener.onMappingSuccess());
+                                }
+                                return; // No hacemos sonar la nota, solo la registramos
+                            }
+
+                            // B. Si estamos en modo normal, comprobamos si la tecla hace algo especial
+                            String action = mappingManager.getActionForMidiKey(data1);
+                            if (action != null) {
+                                if (actionListener != null) {
+                                    javafx.application.Platform.runLater(() -> actionListener.onActionTriggered(action));
+                                }
+                                return; // Ejecuta la acción y no suena la nota
+                            }
+                        }
+                        // 🚨 --- FIN INTERCEPTOR --- 🚨
+
+                        // Comportamiento normal (Si no está mapeada a nada especial)
                         if (channel == 9) {
-                            // ¡CORRECCIÓN 1! Mandamos el golpe a playPad para que SE GRABE
                             playPad(data1, velocityOrValue);
                         } else {
-                            // El piano ya pasa por noteOn, que sí sabe grabar
                             noteOn(data1, velocityOrValue);
                         }
                     } else {
@@ -193,23 +372,21 @@ public class MidiEngine {
                     int ccNumber = data1;
                     int ccValue = velocityOrValue;
 
-                    // Mantenemos el log para confirmar que todo va fino
-                    System.out.println("🎚️ Hardware -> CC: " + ccNumber + " | Valor: " + ccValue);
+                    // Solo procesamos si son los faders que nos interesan
+                    if (ccNumber == 82 || ccNumber == 83 || ccNumber == 85 || ccNumber == 17) {
+                        int targetChannel = (ccNumber == 82) ? 0 : (ccNumber == 83) ? 1 : (ccNumber == 85) ? 2 : 3;
 
-                    // MAPEO REAL DE TU MINILAB:
-                    // Usamos el CC 7, que es el estándar MIDI universal para el Volumen de Canal.
-                    if (ccNumber == 82) { // Tu primer fader
-                        channels[0].controlChange(7, ccValue);
-                    } else if (ccNumber == 83) { // Tu segundo fader
-                        channels[1].controlChange(7, ccValue);
-                    } else if (ccNumber == 85) { // Tu tercer fader
-                        channels[2].controlChange(7, ccValue);
-                    } else if (ccNumber == 17) { // Tu cuarto fader/knob
-                        channels[3].controlChange(7, ccValue);
+                        setChannelVolume(targetChannel, ccValue);
+
+                        if (controlChangeListener != null) {
+                            javafx.application.Platform.runLater(() ->
+                                    controlChangeListener.onControlChange(ccNumber, ccValue));
+                        }
                     }
                 }
             }
         }
+
         @Override
         public void close() {}
     }
