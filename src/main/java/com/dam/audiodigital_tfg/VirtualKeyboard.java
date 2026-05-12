@@ -1,6 +1,5 @@
 package com.dam.audiodigital_tfg;
 
-import com.dam.audiodigital_tfg.audio.MetronomeEngine;
 import com.dam.audiodigital_tfg.audio.MidiEngine;
 import com.dam.audiodigital_tfg.db.SessionDAO;
 import javafx.application.Application;
@@ -15,7 +14,6 @@ import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
-
 
 import java.util.HashMap;
 import java.util.Map;
@@ -34,6 +32,9 @@ public class VirtualKeyboard extends Application {
             "-fx-background-color: black; -fx-text-fill: white; -fx-cursor: hand;";
 
     private static final Map<Integer, String> OCTAVE_STRUCTURE = new HashMap<>();
+
+    private MappingManager mappingManager = new MappingManager();
+
 
     static {
         OCTAVE_STRUCTURE.put(0, "Do");
@@ -276,12 +277,19 @@ public class VirtualKeyboard extends Application {
             lblTrack.setStyle("-fx-text-fill: #00ffcc; -fx-font-weight: bold; -fx-font-size: 11px;");
 
             // 1. Slider de Volumen
+            // 1. Slider de Volumen
             Slider volSlider = new Slider(0, 127, 100);
             volSlider.setOrientation(Orientation.VERTICAL);
             volSlider.setPrefHeight(120);
             int ccMap = (i == 0) ? 82 : (i == 1) ? 83 : (i == 2) ? 85 : 17;
             vSliders.put(ccMap, volSlider);
-            volSlider.valueProperty().addListener((obs, old, val) -> midiEngine.setChannelVolume(channelIdx, val.intValue()));
+
+// 🚨 ARREGLO: Abrimos llaves { } para que haga las dos cosas
+            volSlider.valueProperty().addListener((obs, old, val) -> {
+                midiEngine.setChannelVolume(channelIdx, val.intValue());
+                midiEngine.setChannelVolume(9, val.intValue()); // Usamos 'val' y está dentro de las llaves
+            });
+
 
             // 2. Selector de Sesión
             ComboBox<com.dam.audiodigital_tfg.db.SessionDAO.SessionInfo> sessionSelector = new ComboBox<>();
@@ -444,7 +452,7 @@ public class VirtualKeyboard extends Application {
         primaryStage.show();
 
         // =========================
-        // BARRA DE TRANSPORTE (REC / STOP)
+        // BARRA DE TRANSPORTE (REC / STOP / MAPEO)
         // =========================
         HBox transportBar = new HBox(10);
         transportBar.setAlignment(Pos.CENTER);
@@ -453,39 +461,167 @@ public class VirtualKeyboard extends Application {
         Button stopBtn = new Button("⏹ STOP");
         stopBtn.setDisable(true); // Deshabilitado hasta que grabemos
 
+        // 1. CREAMOS EL BOTÓN DE MAPEO
+        ToggleButton btnMapeo = new ToggleButton("🎧 MIDI/Key Learn");
+        btnMapeo.setStyle("-fx-background-color: #3F51B5; -fx-text-fill: white; -fx-font-weight: bold; -fx-cursor: hand;");
+
         recBtn.setStyle("-fx-background-color: #ff4444; -fx-text-fill: white; -fx-font-weight: bold;");
         stopBtn.setStyle("-fx-background-color: #555555; -fx-text-fill: white;");
 
+        // 2. LÓGICA DEL BOTÓN DE MAPEO
+        btnMapeo.setOnAction(e -> {
+            boolean activo = btnMapeo.isSelected();
+            mappingManager.setLearnMode(activo);
+
+            if (activo) {
+                btnMapeo.setText("🛑 Escuchando...");
+                btnMapeo.setStyle("-fx-background-color: #f44336; -fx-text-fill: white; -fx-font-weight: bold;");
+            } else {
+                btnMapeo.setText("🎧 MIDI/Key Learn");
+                btnMapeo.setStyle("-fx-background-color: #3F51B5; -fx-text-fill: white; -fx-font-weight: bold;");
+            }
+        });
+
+        // 3. LÓGICA DEL BOTÓN REC
         recBtn.setOnAction(e -> {
-            midiEngine.startRecording();
-            recBtn.setDisable(true);
-            stopBtn.setDisable(false);
-            recBtn.setText("⏺ GRABANDO...");
+            if (mappingManager.isLearnMode()) {
+                mappingManager.setWaitingAction("ACTION_REC");
+                recBtn.setStyle("-fx-border-color: yellow; -fx-border-width: 3px; -fx-background-color: #ff4444; -fx-text-fill: white; -fx-font-weight: bold;");
+            } else {
+                midiEngine.startRecording();
+                recBtn.setDisable(true);
+                stopBtn.setDisable(false);
+                recBtn.setText("⏺ GRABANDO...");
+            }
         });
 
+        // 4. LÓGICA DEL BOTÓN STOP
         stopBtn.setOnAction(e -> {
-            midiEngine.stopRecording();
-            recBtn.setDisable(false);
-            stopBtn.setDisable(true);
-            recBtn.setText("🔴 REC");
+            if (mappingManager.isLearnMode()) {
+                mappingManager.setWaitingAction("ACTION_STOP");
+                stopBtn.setStyle("-fx-border-color: yellow; -fx-border-width: 3px; -fx-background-color: #555555; -fx-text-fill: white;");
+            } else {
+                midiEngine.stopRecording();
+                recBtn.setDisable(false);
+                stopBtn.setDisable(true);
+                recBtn.setText("🔴 REC");
 
-            // Al parar, preguntamos nombre para guardar la sesión
-            javafx.scene.control.TextInputDialog dialog = new javafx.scene.control.TextInputDialog("Mi Sesión " + System.currentTimeMillis());
-            dialog.setTitle("Guardar Grabación");
-            dialog.setHeaderText("¡Grabación finalizada!");
-            dialog.setContentText("Introduce el nombre de la sesión:");
+                javafx.scene.control.TextInputDialog dialog = new javafx.scene.control.TextInputDialog("Mi Sesión " + System.currentTimeMillis());
+                dialog.setTitle("Guardar Grabación");
+                dialog.setHeaderText("¡Grabación finalizada!");
+                dialog.setContentText("Introduce el nombre de la sesión:");
 
-            dialog.showAndWait().ifPresent(name -> {
-                SessionDAO sessionDAO = new SessionDAO();
-                sessionDAO.saveSession(name, midiEngine.getRecordedNotes());
-            });
+                dialog.showAndWait().ifPresent(name -> {
+                    com.dam.audiodigital_tfg.db.SessionDAO sessionDAO = new com.dam.audiodigital_tfg.db.SessionDAO();
+                    sessionDAO.saveSession(name, midiEngine.getRecordedNotes());
+                });
+            }
         });
 
-        transportBar.getChildren().addAll(recBtn, stopBtn);
+        // 5. AÑADIMOS LOS 3 BOTONES AL CONTENEDOR (¡Aquí está la clave!)
+        transportBar.getChildren().addAll(recBtn, stopBtn, btnMapeo);
 
-        // Añadimos la barra de transporte al topPane (debajo de los otros controles)
+        // Añadimos la barra de transporte al topPane
         topPane.getChildren().add(transportBar);
+
+        // 🚨 BLOQUE LISTENER CORREGIDO 🚨
+        midiEngine.setActionTriggerListener(new MidiEngine.ActionTriggerListener() {
+            @Override
+            public void onActionTriggered(String actionId) {
+                // Aquí centralizamos todas las acciones globales
+                switch (actionId) {
+                    case "ACTION_REC":
+                        recBtn.fire(); // Dispara el botón rojo de la barra de transporte
+                        break;
+                    case "ACTION_STOP":
+                        stopBtn.fire(); // Dispara el botón gris de la barra de transporte
+                        break;
+                }
+            }
+
+            @Override
+            public void onMappingSuccess() {
+                // Limpiamos los bordes amarillos y devolvemos el color original
+                recBtn.setStyle("-fx-background-color: #ff4444; -fx-text-fill: white; -fx-font-weight: bold; -fx-border-width: 0;");
+                stopBtn.setStyle("-fx-background-color: #555555; -fx-text-fill: white; -fx-border-width: 0;");
+                System.out.println("✨ Mapeo capturado con éxito.");
+            }
+        });
+
+        // Lista exclusiva para evitar la metralleta del piano
+        java.util.Set<String> notasSonando = new java.util.HashSet<>();
+        // 🚨 EL ÚNICO INTERCEPTOR MAESTRO DE TECLADO PC 🚨
+        scene.setOnKeyPressed(event -> {
+            javafx.scene.input.KeyCode code = event.getCode();
+
+            if (mappingManager.isLearnMode()) {
+                // 1. MODO APRENDER
+                if (mappingManager.getWaitingAction() != null) {
+                    boolean mapeado = mappingManager.mapPcKey(code);
+                    if (mapeado) {
+                        recBtn.setStyle("-fx-background-color: #ff4444; -fx-text-fill: white; -fx-font-weight: bold; -fx-border-width: 0;");
+                        stopBtn.setStyle("-fx-background-color: #555555; -fx-text-fill: white; -fx-border-width: 0;");
+                        System.out.println("Tecla [" + code + "] vinculada con éxito.");
+                    }
+                }
+            } else {
+                // 2. MODO NORMAL
+                String accion = mappingManager.getActionForPcKey(code);
+
+                if (accion != null) {
+
+                    if (accion.equals("ACTION_REC")) {
+                        recBtn.fire();
+                    } else if (accion.equals("ACTION_STOP")) {
+                        stopBtn.fire();
+                    }
+                    else if (accion.startsWith("DRUM_")) {
+                        // BATERÍA
+                        try {
+                            int note = Integer.parseInt(accion.split("_")[1]);
+                            if (midiEngine != null) midiEngine.playPad(note, 127);
+                        } catch (Exception ex) { }
+                    }
+                    else if (accion.startsWith("PIANO_")) {
+                        // 🚨 Barrera anti-metralleta SOLO para el piano
+                        if (notasSonando.contains(accion)) {
+                            return; // Si la nota ya está sonando, ignoramos
+                        }
+                        notasSonando.add(accion); // Marcamos que empieza a sonar
+
+                        try {
+                            int note = Integer.parseInt(accion.split("_")[1]);
+                            if (midiEngine != null) midiEngine.noteOn(note, 127);
+                        } catch (Exception ex) { }
+                    }
+                }
+            }
+        });
+
+        // 🚨 INTERCEPTOR PARA SOLTAR LA TECLA (Vital para que el piano no suene infinito) 🚨
+        scene.setOnKeyReleased(event -> {
+            if (!mappingManager.isLearnMode()) {
+                String accion = mappingManager.getActionForPcKey(event.getCode());
+                if (accion != null && accion.startsWith("PIANO_")) {
+
+                    // 🚨 Borramos la nota de la lista porque la hemos soltado
+                    notasSonando.remove(accion);
+
+                    try {
+                        int note = Integer.parseInt(accion.split("_")[1]);
+                        if (midiEngine != null) midiEngine.noteOff(note);
+                    } catch (Exception ex) { }
+                }
+            }
+        });
+
+        primaryStage.setTitle("Music Box DAW");
+        primaryStage.setScene(scene);
+        primaryStage.show();
+
     }
+
+
 
     private void createKeyboard(HBox container, int numOctaves) {
 
@@ -509,32 +645,47 @@ public class VirtualKeyboard extends Application {
                     key.setPrefSize(50, 200);
                 }
 
-                // ... (código de creación del botón key) ...
+                // Calculamos la nota MIDI real sumando la nota base (C4 u otra)
+                int actualMidiNote = baseMidiNote + (octave * 12) + noteInOctave;
 
-                int finalMidiNote = (octave * 12) + noteInOctave;
+                // Generamos el ID dinámico, por ejemplo: "PIANO_60"
+                final String actionId = "PIANO_" + actualMidiNote;
 
-                // Al hacer clic: tocamos la nota y cambiamos el color del botón (feedback visual)
+                // Al hacer clic: decidimos si mapeamos o tocamos
                 key.setOnMousePressed(mouseEvent -> {
-                    key.setStyle("-fx-background-color: #a0a0a0; -fx-cursor: hand;"); // Gris al pulsar
-                    midiEngine.noteOn(baseMidiNote + finalMidiNote, 100);
+                    if (mappingManager.isLearnMode()) {
+                        // MODO APRENDER: Esperamos la tecla del PC y ponemos color llamativo
+                        mappingManager.setWaitingAction(actionId);
+                        key.setStyle("-fx-background-color: yellow; -fx-border-color: orange; -fx-border-width: 3px; -fx-cursor: hand;");
+                    } else {
+                        // MODO NORMAL: Tocamos la nota y cambiamos a gris como feedback
+                        key.setStyle("-fx-background-color: #a0a0a0; -fx-cursor: hand;");
+                        midiEngine.noteOn(actualMidiNote, 100);
+                    }
                 });
 
-                // Al soltar el clic: apagamos la nota y devolvemos el color original
+                // Al soltar el clic
                 key.setOnMouseReleased(mouseEvent -> {
-                    key.setStyle(isBlack ? BLACK_KEY_STYLE : WHITE_KEY_STYLE);
-                    midiEngine.noteOff(baseMidiNote + finalMidiNote);
+                    // Solo devolvemos el color original si NO está esperando ser mapeada (amarilla)
+                    if (!mappingManager.isLearnMode() || !actionId.equals(mappingManager.getWaitingAction())) {
+                        key.setStyle(isBlack ? BLACK_KEY_STYLE : WHITE_KEY_STYLE);
+                    }
+                    midiEngine.noteOff(actualMidiNote);
                 });
 
                 // Por si el usuario arrastra el ratón fuera del botón sin soltar el clic
                 key.setOnMouseExited(mouseEvent -> {
-                    key.setStyle(isBlack ? BLACK_KEY_STYLE : WHITE_KEY_STYLE);
-                    midiEngine.noteOff(baseMidiNote + finalMidiNote);
+                    if (!mappingManager.isLearnMode() || !actionId.equals(mappingManager.getWaitingAction())) {
+                        key.setStyle(isBlack ? BLACK_KEY_STYLE : WHITE_KEY_STYLE);
+                    }
+                    midiEngine.noteOff(actualMidiNote);
                 });
 
                 container.getChildren().add(key);
             }
         }
     }
+
     private javafx.scene.layout.GridPane createDrumPad() {
         javafx.scene.layout.GridPane grid = new javafx.scene.layout.GridPane();
         grid.setAlignment(Pos.CENTER);
@@ -543,7 +694,6 @@ public class VirtualKeyboard extends Application {
         grid.setPadding(new Insets(20));
 
         // Mapeo estándar MIDI de Percusión (Canal 10)
-        // 36: Kick (Bombo), 38: Snare (Caja), 42: Hi-Hat Cerrado, 49: Crash...
         int[] drumNotes = {
                 49, 51, 52, 53, // Platos
                 43, 45, 47, 48, // Toms
@@ -567,17 +717,31 @@ public class VirtualKeyboard extends Application {
 
                 final int midiNote = drumNotes[count];
 
-                // Evento al pulsar (Usamos el canal de percusión que nos presta el MidiEngine)
+                // 🔥 CREAMOS UN ID DE ACCIÓN DINÁMICO (Ej: "DRUM_36")
+                final String actionId = "DRUM_" + midiNote;
+
+                // Evento al pulsar
                 pad.setOnMousePressed(e -> {
-                    pad.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 10;");
-                    if (midiEngine != null && midiEngine.getPercussionChannel() != null) {
-                        midiEngine.getPercussionChannel().noteOn(midiNote, 127);
+                    if (mappingManager.isLearnMode()) {
+                        // MODO APRENDER: El pad pide ser mapeado y se pone amarillo
+                        mappingManager.setWaitingAction(actionId);
+                        pad.setStyle("-fx-background-color: #333333; -fx-border-color: yellow; -fx-border-width: 3px; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 10; -fx-border-radius: 10;");
+                    } else {
+                        // MODO NORMAL: Se pone verde y suena
+                        pad.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 10;");
+                        // Usamos playPad para que pase por el grabador de sesiones
+                        if (midiEngine != null) {
+                            midiEngine.playPad(midiNote, 127);
+                        }
                     }
                 });
 
-                // Evento al soltar el clic (vuelve a su color original)
+                // Evento al soltar el clic
                 pad.setOnMouseReleased(e -> {
-                    pad.setStyle("-fx-background-color: #333333; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 10;");
+                    // Solo le quitamos el color verde si no está esperando a ser mapeado (amarillo)
+                    if (!mappingManager.isLearnMode() || !actionId.equals(mappingManager.getWaitingAction())) {
+                        pad.setStyle("-fx-background-color: #333333; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 10;");
+                    }
                 });
 
                 grid.add(pad, col, row);
@@ -585,31 +749,23 @@ public class VirtualKeyboard extends Application {
             }
         }
 
-        // Botón para guardar el Kit actual en la Base de Datos
+        // Botón para guardar el Kit actual en la Base de Datos (INTACTO)
         Button saveKitBtn = new Button("💾 Guardar Kit...");
         saveKitBtn.setStyle("-fx-background-color: #2196F3; -fx-text-fill: white; -fx-font-weight: bold;");
 
         saveKitBtn.setOnAction(e -> {
-            // 1. Creamos una ventana de diálogo para pedir el nombre
             javafx.scene.control.TextInputDialog dialog = new javafx.scene.control.TextInputDialog("Nuevo Kit MiniLab");
             dialog.setTitle("Guardar Drum Kit");
             dialog.setHeaderText("Guardar configuración actual de pads");
             dialog.setContentText("Introduce un nombre único para este Kit:");
 
-            // 2. Mostramos la ventana y capturamos la respuesta
             java.util.Optional<String> result = dialog.showAndWait();
 
-            // 3. Si el usuario le da a "Aceptar" y ha escrito algo...
             result.ifPresent(kitName -> {
                 com.dam.audiodigital_tfg.db.DrumKitDAO dao = new com.dam.audiodigital_tfg.db.DrumKitDAO();
-
-                // Intentamos guardarlo. Si el nombre ya existe, el DAO saltará por el catch
                 dao.saveCustomKit(kitName, drumNotes, drumNames);
 
-                // Feedback visual rápido
                 saveKitBtn.setText("✅ Guardado: " + kitName);
-
-                // Volvemos a poner el texto original después de 2 segundos
                 new java.util.Timer().schedule(new java.util.TimerTask() {
                     @Override
                     public void run() {
@@ -619,7 +775,6 @@ public class VirtualKeyboard extends Application {
             });
         });
 
-        // Añadimos el botón debajo de la cuadrícula (columna 0, fila 4, ocupando 4 columnas de ancho)
         grid.add(saveKitBtn, 0, 4, 4, 1);
 
         return grid;

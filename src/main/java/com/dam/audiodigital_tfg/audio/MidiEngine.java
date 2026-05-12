@@ -8,6 +8,8 @@ import java.util.concurrent.CompletableFuture;
 
 public class MidiEngine {
 
+    private com.dam.audiodigital_tfg.MappingManager mappingManager;
+
     private Synthesizer synthesizer;
     private MidiChannel[] channels;
     private CppAudioBridge cppBridge = new CppAudioBridge();
@@ -88,7 +90,21 @@ public class MidiEngine {
         this.isDelayEnabled = enabled;
         System.out.println("⏱️ Efecto Delay: " + (enabled ? "ENCENDIDO" : "APAGADO"));
     }
+    public void setMappingManager(com.dam.audiodigital_tfg.MappingManager mm) {
+        this.mappingManager = mm;
+    }
 
+    // Listener para avisar a la interfaz de que se ha disparado una acción
+    public interface ActionTriggerListener {
+        void onActionTriggered(String actionId);
+        void onMappingSuccess(); // Para que la interfaz quite el borde amarillo
+    }
+
+    private ActionTriggerListener actionListener;
+
+    public void setActionTriggerListener(ActionTriggerListener listener) {
+        this.actionListener = listener;
+    }
     // Método para cambiar volumen de un canal específico
     public void setChannelVolume(int channel, int volume) {
         if (channels != null && channels.length > channel) {
@@ -314,11 +330,33 @@ public class MidiEngine {
                 // 1. GESTIÓN DE NOTAS (Teclas y Pads)
                 if (command == ShortMessage.NOTE_ON) {
                     if (velocityOrValue > 0) {
+
+                        // 🚨 --- INTERCEPTOR DE MAPEO --- 🚨
+                        if (mappingManager != null) {
+                            // A. Si estamos en modo aprender y esperando una tecla...
+                            if (mappingManager.isLearnMode() && mappingManager.getWaitingAction() != null) {
+                                mappingManager.mapMidiKey(data1);
+                                if (actionListener != null) {
+                                    javafx.application.Platform.runLater(() -> actionListener.onMappingSuccess());
+                                }
+                                return; // No hacemos sonar la nota, solo la registramos
+                            }
+
+                            // B. Si estamos en modo normal, comprobamos si la tecla hace algo especial
+                            String action = mappingManager.getActionForMidiKey(data1);
+                            if (action != null) {
+                                if (actionListener != null) {
+                                    javafx.application.Platform.runLater(() -> actionListener.onActionTriggered(action));
+                                }
+                                return; // Ejecuta la acción y no suena la nota
+                            }
+                        }
+                        // 🚨 --- FIN INTERCEPTOR --- 🚨
+
+                        // Comportamiento normal (Si no está mapeada a nada especial)
                         if (channel == 9) {
-                            // ¡CORRECCIÓN 1! Mandamos el golpe a playPad para que SE GRABE
                             playPad(data1, velocityOrValue);
                         } else {
-                            // El piano ya pasa por noteOn, que sí sabe grabar
                             noteOn(data1, velocityOrValue);
                         }
                     } else {
@@ -338,10 +376,8 @@ public class MidiEngine {
                     if (ccNumber == 82 || ccNumber == 83 || ccNumber == 85 || ccNumber == 17) {
                         int targetChannel = (ccNumber == 82) ? 0 : (ccNumber == 83) ? 1 : (ccNumber == 85) ? 2 : 3;
 
-                        // Aplicamos volumen
                         setChannelVolume(targetChannel, ccValue);
 
-                        // Avisamos a la UI para mover los Sliders
                         if (controlChangeListener != null) {
                             javafx.application.Platform.runLater(() ->
                                     controlChangeListener.onControlChange(ccNumber, ccValue));
