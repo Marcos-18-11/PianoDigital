@@ -115,7 +115,7 @@ public class VirtualKeyboard extends Application {
                     midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_JAZZ_GUITAR);
                     break;
                 case "Bajo Eléctrico":
-                    midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_GELECTRIC_BASS);
+                    midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_ELECTRIC_BASS);
                     break;
                 case "Contrabajo":
                     midiEngine.changeInstrument(MidiEngine.INSTRUMENT_ACOUSTIC_CONTRABASS);
@@ -310,32 +310,48 @@ public class VirtualKeyboard extends Application {
             playTrackBtn.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold;");
             playTrackBtn.setPrefWidth(100);
 
+            // 🚨 EL ESTADO DEL CANAL: Memoria para saber si está sonando
+            boolean[] isPlaying = {false};
+
             // Cuando seleccionamos una sesión en el ComboBox...
             sessionSelector.setOnAction(e -> {
                 var selected = sessionSelector.getValue();
                 if (selected != null) {
                     loadedNotes[0] = new com.dam.audiodigital_tfg.db.SessionDAO().getNotesBySession(selected.id);
+
+                    // Si seleccionamos una pista nueva, forzamos a detener la anterior por seguridad
+                    if (isPlaying[0]) {
+                        midiEngine.stopSessionPlayback(channelIdx); // Método para detener la música
+                        isPlaying[0] = false;
+                    }
+
+                    playTrackBtn.setText("▶");
                     playTrackBtn.setDisable(false); // Ya hay notas, habilitamos el Play
-                    playTrackBtn.setStyle("-fx-background-color: #2196F3; -fx-text-fill: white;"); // Azul: "Listo para sonar"
+                    playTrackBtn.setStyle("-fx-background-color: #2196F3; -fx-text-fill: white; -fx-font-weight: bold;"); // Azul: Listo
                 }
             });
 
-            // Acción del botón Play
+            // 4. Lógica del botón Play/Stop corregida
             playTrackBtn.setOnAction(e -> {
                 if (loadedNotes[0] != null && !loadedNotes[0].isEmpty()) {
-                    midiEngine.playSession(loadedNotes[0], channelIdx);
+                    if (!isPlaying[0]) {
+                        // ---- PLAY ----
+                        midiEngine.playSession(loadedNotes[0], channelIdx);
 
-                    // Efecto visual rápido de reproducción
-                    playTrackBtn.setText("⏳");
-                    new java.util.Timer().schedule(new java.util.TimerTask() {
-                        @Override
-                        public void run() {
-                            javafx.application.Platform.runLater(() -> playTrackBtn.setText("▶"));
-                        }
-                    }, 1000);
+                        playTrackBtn.setText("⏹"); // Cambia a Stop
+                        playTrackBtn.setStyle("-fx-background-color: #f44336; -fx-text-fill: white; -fx-font-weight: bold;"); // Rojo
+                        isPlaying[0] = true;
+                    } else {
+                        // ---- STOP ----
+                        // 🚨 Llamamos al MidiEngine para que detenga la reproducción de este canal
+                        midiEngine.stopSessionPlayback(channelIdx);
+
+                        playTrackBtn.setText("▶"); // Vuelve a Play
+                        playTrackBtn.setStyle("-fx-background-color: #2196F3; -fx-text-fill: white; -fx-font-weight: bold;"); // Azul
+                        isPlaying[0] = false;
+                    }
                 }
             });
-
             // Añadimos todo al rack del canal (Orden: Nombre -> Slider -> Combo -> Play)
             channelRack.getChildren().addAll(lblTrack, volSlider, sessionSelector, playTrackBtn);
             leftPane.getChildren().add(channelRack);
@@ -468,7 +484,7 @@ public class VirtualKeyboard extends Application {
         recBtn.setStyle("-fx-background-color: #ff4444; -fx-text-fill: white; -fx-font-weight: bold;");
         stopBtn.setStyle("-fx-background-color: #555555; -fx-text-fill: white;");
 
-        // 2. LÓGICA DEL BOTÓN DE MAPEO
+        // 2. LÓGICA DEL BOTÓN DE MAPEO CORREGIDA
         btnMapeo.setOnAction(e -> {
             boolean activo = btnMapeo.isSelected();
             mappingManager.setLearnMode(activo);
@@ -476,9 +492,17 @@ public class VirtualKeyboard extends Application {
             if (activo) {
                 btnMapeo.setText("🛑 Escuchando...");
                 btnMapeo.setStyle("-fx-background-color: #f44336; -fx-text-fill: white; -fx-font-weight: bold;");
+
+                // 🚨 EL TRUCO: Despertamos el botón temporalmente para poder mapearlo
+                stopBtn.setDisable(false);
             } else {
                 btnMapeo.setText("🎧 MIDI/Key Learn");
                 btnMapeo.setStyle("-fx-background-color: #3F51B5; -fx-text-fill: white; -fx-font-weight: bold;");
+
+                // Lo volvemos a dormir SOLO si no estamos grabando
+                if (recBtn.getText().equals("🔴 REC")) {
+                    stopBtn.setDisable(true);
+                }
             }
         });
 
@@ -518,8 +542,53 @@ public class VirtualKeyboard extends Application {
             }
         });
 
-        // 5. AÑADIMOS LOS 3 BOTONES AL CONTENEDOR (¡Aquí está la clave!)
-        transportBar.getChildren().addAll(recBtn, stopBtn, btnMapeo);
+// 1. Creamos un DAO exclusivo para este panel y le damos un nombre único
+        com.dam.audiodigital_tfg.db.SessionDAO gestorDAO = new com.dam.audiodigital_tfg.db.SessionDAO();
+
+// 2. Creamos el botón del gestor
+        Button btnGestorGrabaciones = new Button("📂 Mis Grabaciones");
+        btnGestorGrabaciones.setStyle("-fx-background-color: #607D8B; -fx-text-fill: white; -fx-font-weight: bold;");
+
+// 3. Lógica del botón (Abrir ventana)
+        btnGestorGrabaciones.setOnAction(e -> {
+            javafx.stage.Stage ventanaGestor = new javafx.stage.Stage();
+            ventanaGestor.setTitle("Gestor de Grabaciones");
+
+            javafx.scene.layout.VBox layoutGestor = new javafx.scene.layout.VBox(15);
+            layoutGestor.setPadding(new javafx.geometry.Insets(20));
+            layoutGestor.setStyle("-fx-background-color: #1e1e1e;");
+
+            // ListView para mostrar las sesiones usando la clase interna
+            javafx.scene.control.ListView<com.dam.audiodigital_tfg.db.SessionDAO.SessionInfo> listaGrabaciones = new javafx.scene.control.ListView<>();
+
+            // Rellenamos la lista usando nuestro nuevo gestorDAO
+            listaGrabaciones.getItems().addAll(gestorDAO.getAllSessions());
+            listaGrabaciones.setPrefHeight(250);
+
+            // Botón de eliminar
+            Button btnBorrarRegistro = new Button("🗑️ Eliminar Seleccionada");
+            btnBorrarRegistro.setMaxWidth(Double.MAX_VALUE);
+            btnBorrarRegistro.setStyle("-fx-background-color: #f44336; -fx-text-fill: white; -fx-font-weight: bold;");
+
+            btnBorrarRegistro.setOnAction(event -> {
+                com.dam.audiodigital_tfg.db.SessionDAO.SessionInfo seleccionada = listaGrabaciones.getSelectionModel().getSelectedItem();
+
+                if (seleccionada != null) {
+                    // Borramos de la base de datos real
+                    gestorDAO.deleteSession(seleccionada.id);
+                    // Borramos de la pantalla
+                    listaGrabaciones.getItems().remove(seleccionada);
+                    System.out.println("✅ Sesión '" + seleccionada.name + "' eliminada del sistema.");
+                }
+            });
+
+            layoutGestor.getChildren().addAll(new javafx.scene.control.Label("Tus grabaciones:"), listaGrabaciones, btnBorrarRegistro);
+            ventanaGestor.setScene(new javafx.scene.Scene(layoutGestor, 400, 400));
+            ventanaGestor.show();
+        });
+
+// 4. AÑADIMOS TODOS LOS BOTONES A LA BARRA (¡Esta línea sustituye a la tuya antigua!)
+        transportBar.getChildren().addAll(recBtn, stopBtn, btnMapeo, btnGestorGrabaciones);
 
         // Añadimos la barra de transporte al topPane
         topPane.getChildren().add(transportBar);

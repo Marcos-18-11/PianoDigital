@@ -27,7 +27,9 @@ public class MidiEngine {
     private java.util.List<RecordedNote> recordedNotes = new java.util.ArrayList<>();
 
     private java.util.Map<Integer, Long> activeNotes = new java.util.HashMap<>();
-
+    // ================= Variables del Mixer (Control de Reproducción) =================
+    private java.util.Map<Integer, Thread> hilosReproduccion = new java.util.concurrent.ConcurrentHashMap<>();
+    private java.util.Map<Integer, Boolean> reproduciendoCanal = new java.util.concurrent.ConcurrentHashMap<>();
     // ==========================================
 // CONSTANTES DE INSTRUMENTOS (General MIDI)
 // ==========================================
@@ -37,7 +39,7 @@ public class MidiEngine {
     public static final int INSTRUMENT_ACOUSTIC_CHURCH_ORGAN = 20;
     public static final int INSTRUMENT_ACOUSTIC_GUITAR = 25;
     public static final int INSTRUMENT_ACOUSTIC_JAZZ_GUITAR = 27;
-    public static final int INSTRUMENT_ACOUSTIC_GELECTRIC_BASS = 34;
+    public static final int INSTRUMENT_ACOUSTIC_ELECTRIC_BASS = 34;
     public static final int INSTRUMENT_ACOUSTIC_CONTRABASS = 44;
     public static final int INSTRUMENT_ACOUSTIC_VIOLA = 42;
     public static final int INSTRUMENT_ACOUSTIC_ORCHESTA = 56;
@@ -115,9 +117,7 @@ public class MidiEngine {
     // ==========================================
     // IMPORTACIÓN DE RECURSOS EXTERNOS
     // ==========================================
-    // ==========================================
-    // IMPORTACIÓN DE RECURSOS EXTERNOS (SF2/DLS)
-    // ==========================================
+
     public void loadCustomSoundbank(java.io.File file) {
         try {
             Soundbank customBank = MidiSystem.getSoundbank(file);
@@ -429,43 +429,86 @@ public class MidiEngine {
         return recordedNotes;
     }
 
+    // ==========================================================
+    // REPRODUCCIÓN DEL MIXER (Con soporte para Play / Stop)
+    // ==========================================================
+
+    public void stopSessionPlayback(int canal) {
+        // 1. Avisamos al bucle para que deje de enviar notas
+        reproduciendoCanal.put(canal, false);
+
+        // 2. Buscamos el hilo principal de ese canal y lo interrumpimos
+        Thread hilo = hilosReproduccion.get(canal);
+        if (hilo != null && hilo.isAlive()) {
+            hilo.interrupt();
+        }
+
+        // 3. Silenciador de emergencia (All Notes Off)
+        // Evita que una nota se quede "pitando" infinitamente si la cortamos a la mitad
+        if (channels != null && channels.length > canal) {
+            channels[canal].controlChange(123, 0); // Apaga las notas del piano/sinte
+            channels[9].controlChange(123, 0);     // Apaga los pads de batería por si acaso
+        }
+    }
+
     public void playSession(List<RecordedNote> notes, int targetChannel) {
         if (notes.isEmpty()) return;
 
-        // Ejecutamos la reproducción en un hilo nuevo (Multithreading)
-        new Thread(() -> {
+        // 1. Si ya había algo sonando en este canal, lo machacamos (parar previo)
+        stopSessionPlayback(targetChannel);
+
+        // 2. Marcamos que este canal empieza a sonar
+        reproduciendoCanal.put(targetChannel, true);
+
+        // 3. Creamos el hilo de reproducción
+        Thread hiloReproduccion = new Thread(() -> {
             System.out.println("▶️ Reproduciendo pista en canal: " + targetChannel);
             long startTime = System.currentTimeMillis();
 
             for (RecordedNote note : notes) {
-                // Calculamos cuánto falta para que deba sonar esta nota
+                // 🚨 VITAL: Si el usuario pulsó STOP, salimos del bucle inmediatamente
+                if (!reproduciendoCanal.getOrDefault(targetChannel, false)) {
+                    break;
+                }
+
                 long timeToWait = note.timestampMs - (System.currentTimeMillis() - startTime);
 
                 if (timeToWait > 0) {
                     try {
                         Thread.sleep(timeToWait);
                     } catch (InterruptedException e) {
+                        // El hilo fue interrumpido por el método stopSessionPlayback. Salimos.
                         Thread.currentThread().interrupt();
                         break;
                     }
                 }
 
-                // Disparamos la nota en el canal correspondiente
-                // Si es batería (is_drum), usamos el canal 9, si no, el targetChannel (0-3)
+                // 🚨 Segunda comprobación por si pulsaron Stop justo mientras dormía
+                if (!reproduciendoCanal.getOrDefault(targetChannel, false)) break;
+
+                // Canal 9 si es batería, el targetChannel si es melódico
                 int channelIndex = note.isDrum ? 9 : targetChannel;
 
-                CompletableFuture.runAsync(() -> {
+                // Lanzamos la nota
+                new Thread(() -> {
                     try {
                         channels[channelIndex].noteOn(note.note, note.velocity);
                         Thread.sleep(note.durationMs);
                         channels[channelIndex].noteOff(note.note);
                     } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
+                        channels[channelIndex].noteOff(note.note); // Apagado seguro si se interrumpe
                     }
-                });
+                }).start();
             }
+
+            // Al terminar de leer todas las notas (o al ser interrumpido), marcamos como apagado
+            reproduciendoCanal.put(targetChannel, false);
             System.out.println("⏹️ Fin de la reproducción del canal " + targetChannel);
-        }).start();
+        });
+
+        // 4. Guardamos el hilo en nuestro diccionario y lo arrancamos
+        hilosReproduccion.put(targetChannel, hiloReproduccion);
+        hiloReproduccion.start();
     }
 
     public void close() {
