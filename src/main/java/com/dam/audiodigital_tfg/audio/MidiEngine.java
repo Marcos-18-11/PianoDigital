@@ -14,12 +14,12 @@ public class MidiEngine {
     private MidiChannel[] channels;
     private CppAudioBridge cppBridge = new CppAudioBridge();
 
-    private boolean isSaturationEnabled = false; // Por defecto apagado
-    private float saturationDrive = 3.0f; // La "fuerza" del efecto
+    private boolean isSaturationEnabled = false;    // Por defecto apagado
+    private float saturationDrive = 3.0f;           // La "fuerza" del efecto
 
     // Controles de Delay
     private boolean isDelayEnabled = false;
-    private int delayTimeMs = 350; // Tiempo en milisegundos que tarda el "eco"
+    private int delayTimeMs = 350; // Tiempo en milisegundos que tarda el eco
 
     // ================= Variables del Secuenciador =================
     private boolean isRecording = false;
@@ -30,9 +30,12 @@ public class MidiEngine {
     // ================= Variables del Mixer (Control de Reproducción) =================
     private java.util.Map<Integer, Thread> hilosReproduccion = new java.util.concurrent.ConcurrentHashMap<>();
     private java.util.Map<Integer, Boolean> reproduciendoCanal = new java.util.concurrent.ConcurrentHashMap<>();
-    // ==========================================
-// CONSTANTES DE INSTRUMENTOS (General MIDI)
-// ==========================================
+
+    private int currentInstrument = 0;
+
+        // =======================================
+    // CONSTANTES DE INSTRUMENTOS (General MIDI)
+        // =======================================
     public static final int INSTRUMENT_ACOUSTIC_PIANO = 0;
     public static final int INSTRUMENT_ACOUSTIC_PIANO_ELECTRIC = 5;
     public static final int INSTRUMENT_ACOUSTIC_ORGAN = 19;
@@ -71,13 +74,14 @@ public class MidiEngine {
         System.out.println("Efecto de Saturación C++: " + (enabled ? "ENCENDIDO" : "APAGADO"));
     }
     public void changeInstrument(int instrumentProgram) {
+        this.currentInstrument = instrumentProgram; // 🚨 NUEVO: Guardamos el estado
         if (channels != null && channels.length > 0) {
             channels[0].programChange(instrumentProgram);
             System.out.println("Instrumento cambiado al programa: " + instrumentProgram);
         }
     }
 
-    // Interfaz para avisar a la UI cuando el hardware mueve un fader
+    // Interfaz para avisar a la UI cuando se mueve un fader
     public interface ControlChangeListener {
         void onControlChange(int ccNumber, int value);
     }
@@ -114,58 +118,6 @@ public class MidiEngine {
         }
     }
 
-    // ==========================================
-    // IMPORTACIÓN DE RECURSOS EXTERNOS
-    // ==========================================
-
-    public void loadCustomSoundbank(java.io.File file) {
-        try {
-            Soundbank customBank = MidiSystem.getSoundbank(file);
-
-            if (synthesizer.isSoundbankSupported(customBank)) {
-                synthesizer.loadAllInstruments(customBank);
-                Instrument[] instruments = customBank.getInstruments();
-
-                boolean pianoAssigned = false;
-                boolean drumsAssigned = false;
-
-                // Recorremos todos los instrumentos que trae el archivo
-                for (Instrument inst : instruments) {
-                    int bank = inst.getPatch().getBank();
-                    int program = inst.getPatch().getProgram();
-
-                    // En el estándar MIDI, el Banco 128 es el de percusión
-                    if (bank == 128 && !drumsAssigned) {
-                        // Lo asignamos al Canal 9 (Drum Pads)
-                        channels[9].programChange(bank, program);
-                        drumsAssigned = true;
-                        System.out.println("🥁 Batería cargada: " + inst.getName());
-                    }
-                    // Si no es el banco 128, es un instrumento melódico
-                    else if (bank != 128 && !pianoAssigned) {
-                        // Lo asignamos al Canal 0 (Piano)
-                        channels[0].programChange(bank, program);
-                        pianoAssigned = true;
-                        System.out.println("🎹 Instrumento melódico cargado: " + inst.getName());
-                    }
-
-                    // Si ya hemos encontrado uno de cada, dejamos de buscar
-                    if (pianoAssigned && drumsAssigned) break;
-                }
-
-                if (!drumsAssigned) {
-                    System.out.println("⚠️ Este SoundFont no contiene kits de batería (Banco 128). Los pads mantendrán el sonido por defecto.");
-                }
-
-            } else {
-                System.err.println("❌ El formato de este banco de sonidos no está soportado por tu SO.");
-            }
-        } catch (Exception e) {
-            System.err.println("❌ Error crítico al leer el archivo de audio: " + file.getName());
-            e.printStackTrace();
-        }
-    }
-
     // --- MÉTODOS DIRECTOS Y SIN LATENCIA ---
     public void noteOn(int noteNumber, int velocity) {
         // 1. Saturación C++ (Si está activa)
@@ -179,14 +131,14 @@ public class MidiEngine {
             channels[0].noteOn(noteNumber, finalVelocity);
         }
 
-        // 🚨 3. GRABACIÓN CON TIEMPO RELATIVO 🚨
+        //  3. GRABACIÓN CON TIEMPO RELATIVO
         if (isRecording) {
             // Guardamos exactamente cuántos milisegundos han pasado desde que le dimos a REC
             long timeElapsed = System.currentTimeMillis() - recordStartTime;
             activeNotes.put(noteNumber, timeElapsed);
         }
 
-        // 4. EFECTO DELAY (El Eco)
+        // 4. EFECTO DELAY
         if (isDelayEnabled) {
             final int echoVelocity = finalVelocity / 2;
             java.util.concurrent.CompletableFuture.runAsync(() -> {
@@ -208,7 +160,7 @@ public class MidiEngine {
         if (channels != null && channels.length > 0) {
             channels[0].noteOff(noteNumber);
 
-            // 🚨 CERRAMOS LA NOTA Y CALCULAMOS LA DURACIÓN REAL 🚨
+            //  CERRAMOS LA NOTA Y CALCULAMOS LA DURACIÓN REAL
             if (isRecording && activeNotes.containsKey(noteNumber)) {
                 long relativeStartTime = activeNotes.remove(noteNumber);
                 long relativeEndTime = System.currentTimeMillis() - recordStartTime;
@@ -220,19 +172,18 @@ public class MidiEngine {
         }
     }
 
-    // Para los Drum Pads (suelen ser golpes cortos o "one-shots", no necesitan duration real)
     // Para los Drum Pads
     public void playPad(int noteNumber, int velocity) {
         MidiChannel percChannel = getPercussionChannel();
         if (percChannel != null) {
 
-            // 1. Saturación C++ (Ideal para bombos y cajas más agresivos)
+            // 1. Saturación C++
             int finalVelocity = velocity;
             if (isSaturationEnabled) {
                 finalVelocity = cppBridge.getSaturatedVelocity(velocity, saturationDrive);
             }
 
-            // 2. Grabamos el golpe (usamos la velocidad ya saturada)
+            // 2. Grabamos el golpe
             if (isRecording) {
                 long timeElapsed = System.currentTimeMillis() - recordStartTime;
                 recordedNotes.add(new com.dam.audiodigital_tfg.RecordedNote(timeElapsed, noteNumber, finalVelocity, 100, true)); // 100ms fijos
@@ -241,7 +192,7 @@ public class MidiEngine {
             // 3. Suena el golpe real
             percChannel.noteOn(noteNumber, finalVelocity);
 
-            // 4. Efecto Delay (Eco en la batería)
+            // 4. Efecto Delay
             if (isDelayEnabled) {
                 final int echoVelocity = finalVelocity / 2; // El eco es más suave
                 java.util.concurrent.CompletableFuture.runAsync(() -> {
@@ -283,8 +234,10 @@ public class MidiEngine {
     // --- EFECTOS MIDI ESTÁNDAR ---
     public void setReverbEnabled(boolean enabled) {
         if (channels != null) {
-            // El nivel MIDI va de 0 a 127. Le ponemos 100 para que se note bastante el "eco"
-            int reverbLevel = enabled ? 100 : 0;
+
+            // El nivel MIDI va de 0 a 127.
+
+            int reverbLevel = enabled ? 100 : 0; // 100 por defecto
 
             // CC 91 es el estándar universal MIDI para Reverb Depth (Profundidad de Reverb)
             channels[0].controlChange(91, reverbLevel);
@@ -331,7 +284,7 @@ public class MidiEngine {
                 if (command == ShortMessage.NOTE_ON) {
                     if (velocityOrValue > 0) {
 
-                        // 🚨 --- INTERCEPTOR DE MAPEO --- 🚨
+                        //  --- INTERCEPTOR DE MAPEO ---
                         if (mappingManager != null) {
                             // A. Si estamos en modo aprender y esperando una tecla...
                             if (mappingManager.isLearnMode() && mappingManager.getWaitingAction() != null) {
@@ -351,7 +304,7 @@ public class MidiEngine {
                                 return; // Ejecuta la acción y no suena la nota
                             }
                         }
-                        // 🚨 --- FIN INTERCEPTOR --- 🚨
+                        //  --- FIN INTERCEPTOR ---
 
                         // Comportamiento normal (Si no está mapeada a nada especial)
                         if (channel == 9) {
@@ -367,15 +320,24 @@ public class MidiEngine {
                     if (channel == 9 && getPercussionChannel() != null) getPercussionChannel().noteOff(data1);
                     else noteOff(data1);
                 }
+
                 // 2. GESTIÓN DE FADERS Y RULETAS (Control Change)
+
                 else if (command == ShortMessage.CONTROL_CHANGE) {
                     int ccNumber = data1;
                     int ccValue = velocityOrValue;
 
                     // Solo procesamos si son los faders que nos interesan
                     if (ccNumber == 82 || ccNumber == 83 || ccNumber == 85 || ccNumber == 17) {
-                        int targetChannel = (ccNumber == 82) ? 0 : (ccNumber == 83) ? 1 : (ccNumber == 85) ? 2 : 3;
 
+                        //  EL ARREGLO: Sumamos 1 a cada canal para emparejarlo con el Mixer de la UI
+                        // CC 82 -> Canal 1 (Pista 1)
+                        // CC 83 -> Canal 2 (Pista 2)
+                        // CC 85 -> Canal 3 (Pista 3)
+                        // CC 17 -> Canal 4 (Pista 4)
+                        int targetChannel = (ccNumber == 82) ? 1 : (ccNumber == 83) ? 2 : (ccNumber == 85) ? 3 : 4;
+
+                        // Cambia el volumen de la pista de reproducción correspondiente
                         setChannelVolume(targetChannel, ccValue);
 
                         if (controlChangeListener != null) {
@@ -429,9 +391,9 @@ public class MidiEngine {
         return recordedNotes;
     }
 
-    // ==========================================================
-    // REPRODUCCIÓN DEL MIXER (Con soporte para Play / Stop)
-    // ==========================================================
+    // =======================
+    // REPRODUCCIÓN DEL MIXER
+    // =======================
 
     public void stopSessionPlayback(int canal) {
         // 1. Avisamos al bucle para que deje de enviar notas
@@ -454,61 +416,88 @@ public class MidiEngine {
     public void playSession(List<RecordedNote> notes, int targetChannel) {
         if (notes.isEmpty()) return;
 
-        // 1. Si ya había algo sonando en este canal, lo machacamos (parar previo)
+        // 1. Si ya había algo sonando en este canal, lo machacamos
         stopSessionPlayback(targetChannel);
 
-        // 2. Marcamos que este canal empieza a sonar
+        // 2. Marcamos que este canal empieza a sonar (ahora está en bucle)
         reproduciendoCanal.put(targetChannel, true);
 
         // 3. Creamos el hilo de reproducción
         Thread hiloReproduccion = new Thread(() -> {
-            System.out.println("▶️ Reproduciendo pista en canal: " + targetChannel);
-            long startTime = System.currentTimeMillis();
+            System.out.println("▶️ Reproduciendo pista en BUCLE en canal: " + targetChannel);
 
-            for (RecordedNote note : notes) {
-                // 🚨 VITAL: Si el usuario pulsó STOP, salimos del bucle inmediatamente
-                if (!reproduciendoCanal.getOrDefault(targetChannel, false)) {
-                    break;
-                }
+            // El bucle while envuelve a toda la reproducción
+            while (reproduciendoCanal.getOrDefault(targetChannel, false)) {
 
-                long timeToWait = note.timestampMs - (System.currentTimeMillis() - startTime);
+                // Tiempo Cero de vuelta concreta
+                long startTime = System.currentTimeMillis();
 
-                if (timeToWait > 0) {
-                    try {
-                        Thread.sleep(timeToWait);
-                    } catch (InterruptedException e) {
-                        // El hilo fue interrumpido por el método stopSessionPlayback. Salimos.
-                        Thread.currentThread().interrupt();
+                for (RecordedNote note : notes) {
+                    // Si el usuario pulsó STOP, salimos del for
+                    if (!reproduciendoCanal.getOrDefault(targetChannel, false)) {
                         break;
                     }
-                }
 
-                // 🚨 Segunda comprobación por si pulsaron Stop justo mientras dormía
-                if (!reproduciendoCanal.getOrDefault(targetChannel, false)) break;
+                    long timeToWait = note.timestampMs - (System.currentTimeMillis() - startTime);
 
-                // Canal 9 si es batería, el targetChannel si es melódico
-                int channelIndex = note.isDrum ? 9 : targetChannel;
-
-                // Lanzamos la nota
-                new Thread(() -> {
-                    try {
-                        channels[channelIndex].noteOn(note.note, note.velocity);
-                        Thread.sleep(note.durationMs);
-                        channels[channelIndex].noteOff(note.note);
-                    } catch (InterruptedException e) {
-                        channels[channelIndex].noteOff(note.note); // Apagado seguro si se interrumpe
+                    if (timeToWait > 0) {
+                        try {
+                            Thread.sleep(timeToWait);
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            break; // Rompe el sleep si le damos a STOP
+                        }
                     }
-                }).start();
-            }
 
-            // Al terminar de leer todas las notas (o al ser interrumpido), marcamos como apagado
-            reproduciendoCanal.put(targetChannel, false);
-            System.out.println("⏹️ Fin de la reproducción del canal " + targetChannel);
+                    if (!reproduciendoCanal.getOrDefault(targetChannel, false)) break;
+
+                    // Canal 9 si es batería, el targetChannel si es melódico
+                    int channelIndex = note.isDrum ? 9 : targetChannel;
+
+                    // Lanzamos la nota
+                    new Thread(() -> {
+                        try {
+                            channels[channelIndex].noteOn(note.note, note.velocity);
+                            Thread.sleep(note.durationMs);
+                            channels[channelIndex].noteOff(note.note);
+                        } catch (InterruptedException e) {
+                            channels[channelIndex].noteOff(note.note); // Apagado seguro si se interrumpe
+                        }
+                    }).start();
+                } // --- FIN DEL FOR (Acaba la secuencia) ---
+
+                // Si llegamos aquí y reproduciendoCanal sigue en true, el while
+                // volverá arriba, reiniciará el startTime y la canción volverá a sonar.
+                // Metemos una micro-pausa de 50ms para suavizar el "salto" del bucle.
+                try {
+                    Thread.sleep(50);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            } // --- FIN DEL WHILE ---
+
+            System.out.println("⏹️ Fin del bucle en el canal " + targetChannel);
         });
 
         // 4. Guardamos el hilo en nuestro diccionario y lo arrancamos
         hilosReproduccion.put(targetChannel, hiloReproduccion);
         hiloReproduccion.start();
+    }
+
+    // Nos dice si un canal concreto está sonando ahora mismo
+    public boolean isChannelPlaying(int canal) {
+        return reproduciendoCanal.getOrDefault(canal, false);
+    }
+
+    public void changeChannelInstrument(int canal, int instrumentProgram) {
+        if (channels != null && channels.length > canal) {
+            channels[canal].programChange(instrumentProgram);
+        }
+    }
+
+    public int getCurrentInstrument() {
+        return currentInstrument;
     }
 
     public void close() {

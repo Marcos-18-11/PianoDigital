@@ -5,28 +5,70 @@
 <?import javafx.scene.control.ComboBox?>
 <?import javafx.scene.control.Label?>
 <?import javafx.scene.control.Slider?>
+<?import javafx.scene.control.TextField?>
 <?import javafx.scene.layout.HBox?>
+<?import javafx.scene.layout.Pane?>
 <?import javafx.scene.layout.VBox?>
 
-<HBox alignment="CENTER" spacing="30.0" style="-fx-background-color: #e8e8e8; -fx-border-color: #cccccc; -fx-border-width: 0 0 2 0;" xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.dam.audiodigital_tfg.MetronomeController">
+<HBox alignment="CENTER" spacing="50.0" minHeight="0.0" prefHeight="350.0" style="-fx-background-color: #2c2f33; -fx-border-color: #1a1c1e; -fx-border-width: 0 0 3 0;" xmlns="http://javafx.com/javafx/17" xmlns:fx="http://javafx.com/fxml/1" fx:controller="com.dam.audiodigital_tfg.MetronomeController">
     <padding>
-        <Insets bottom="15.0" left="20.0" right="20.0" top="15.0" />
+        <Insets bottom="25.0" left="25.0" right="25.0" top="25.0" />
     </padding>
     <children>
-        <Button fx:id="playButton" mnemonicParsing="false" onAction="#togglePlay" prefHeight="45.0" prefWidth="110.0" style="-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold; -fx-cursor: hand;" text="▶ PLAY" />
 
-        <VBox alignment="CENTER" spacing="5.0">
+        <VBox alignment="CENTER" minWidth="220.0" prefWidth="220.0" spacing="15.0" style="-fx-background-color: #3e4249; -fx-padding: 20; -fx-background-radius: 10; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.4), 10, 0, 0, 5);">
             <children>
-                <Label fx:id="bpmLabel" style="-fx-font-weight: bold; -fx-font-size: 14px;" text="BPM: 120" />
-                <Slider fx:id="bpmSlider" max="240.0" min="40.0" prefWidth="250.0" showTickLabels="true" showTickMarks="true" value="120.0" />
+                <Label style="-fx-font-weight: bold; -fx-text-fill: #7289da; -fx-font-size: 18px;" text="RITMO A" />
+                <Button fx:id="playBtnA" mnemonicParsing="false" onAction="#toggleA" prefHeight="45.0" prefWidth="140.0" style="-fx-background-color: #555555; -fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 14px; -fx-cursor: hand; -fx-background-radius: 5;" text="▶ PLAY" />
+
+                <HBox alignment="CENTER" spacing="10.0">
+                    <Label style="-fx-text-fill: white; -fx-font-size: 14px;" text="Golpes:" />
+                    <ComboBox fx:id="beatsComboA" prefWidth="80.0" style="-fx-cursor: hand;" />
+                </HBox>
+
+                <ComboBox fx:id="instComboA" prefWidth="180.0" style="-fx-cursor: hand;" />
+
+                <HBox alignment="CENTER" spacing="10.0">
+                    <Label style="-fx-text-fill: white; -fx-font-size: 12px;" text="Vol" />
+                    <Slider fx:id="volSliderA" max="127.0" value="100.0" HBox.hgrow="ALWAYS" />
+                </HBox>
             </children>
         </VBox>
 
-        <VBox alignment="CENTER" spacing="5.0">
+        <VBox alignment="CENTER" spacing="20.0" minHeight="0.0" HBox.hgrow="ALWAYS">
             <children>
-                <Label style="-fx-font-weight: bold; -fx-font-size: 14px;" text="Ritmo Cruzado" />
-                <ComboBox fx:id="polyComboBox" prefWidth="130.0" style="-fx-cursor: hand;" />
+                <Pane fx:id="visualPane" maxHeight="340.0" maxWidth="340.0" minHeight="0.0" minWidth="0.0" prefHeight="340.0" prefWidth="340.0" />
+
+                <VBox alignment="CENTER" spacing="8.0">
+                    <children>
+                        <HBox alignment="CENTER" spacing="5.0">
+                            <Label style="-fx-font-weight: bold; -fx-font-size: 18px; -fx-text-fill: white;" text="BPM:" />
+                            <TextField fx:id="bpmTextField" alignment="CENTER" prefWidth="75.0" style="-fx-font-weight: bold; -fx-font-size: 16px;" text="120" />
+                        </HBox>
+                        <Slider fx:id="bpmSlider" max="240.0" min="40.0" maxWidth="350.0" prefWidth="300.0" value="120.0" />
+                    </children>
+                </VBox>
             </children>
         </VBox>
+
+        <VBox alignment="CENTER" minWidth="220.0" prefWidth="220.0" spacing="15.0" style="-fx-background-color: #3e4249; -fx-padding: 20; -fx-background-radius: 10; -fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.4), 10, 0, 0, 5);">
+            <children>
+                <Label style="-fx-font-weight: bold; -fx-text-fill: #f04747; -fx-font-size: 18px;" text="RITMO B" />
+                <Button fx:id="playBtnB" mnemonicParsing="false" onAction="#toggleB" prefHeight="45.0" prefWidth="140.0" style="-fx-background-color: #555555; -fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 14px; -fx-cursor: hand; -fx-background-radius: 5;" text="▶ PLAY" />
+
+                <HBox alignment="CENTER" spacing="10.0">
+                    <Label style="-fx-text-fill: white; -fx-font-size: 14px;" text="Golpes:" />
+                    <ComboBox fx:id="beatsComboB" prefWidth="80.0" style="-fx-cursor: hand;" />
+                </HBox>
+
+                <ComboBox fx:id="instComboB" prefWidth="180.0" style="-fx-cursor: hand;" />
+
+                <HBox alignment="CENTER" spacing="10.0">
+                    <Label style="-fx-text-fill: white; -fx-font-size: 12px;" text="Vol" />
+                    <Slider fx:id="volSliderB" max="127.0" value="100.0" HBox.hgrow="ALWAYS" />
+                </HBox>
+            </children>
+        </VBox>
+
     </children>
 </HBox>

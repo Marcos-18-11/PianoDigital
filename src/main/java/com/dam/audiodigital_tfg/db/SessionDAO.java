@@ -33,84 +33,105 @@ public class SessionDAO {
         return notes;
     }
 
-    // Clase auxiliar para guardar el ID y el Nombre juntos
+    //  CLASE AUXILIAR
     public static class SessionInfo {
         public int id;
         public String name;
-        public SessionInfo(int id, String name) { this.id = id; this.name = name; }
-        @Override public String toString() { return name; } // Lo que verá el usuario
+        public int instrumentId; // <-- Variable añadida aquí
+
+
+        public SessionInfo(int id, String name, int instrumentId) {
+            this.id = id;
+            this.name = name;
+            this.instrumentId = instrumentId;
+        }
+
+        @Override
+        public String toString() {
+            return name; // Lo que verá el usuario
+        }
     }
 
     // Método para obtener todas las sesiones
     public java.util.List<SessionInfo> getAllSessions() {
-        java.util.List<SessionInfo> list = new java.util.ArrayList<>();
-        String sql = "SELECT id, name FROM sessions ORDER BY created_at DESC";
+        java.util.List<SessionInfo> sessions = new java.util.ArrayList<>();
+        // Añadimos instrument_id al SELECT
+        String sql = "SELECT id, name, instrument_id FROM sessions ORDER BY created_at DESC";
 
-        try (Connection conn = DatabaseManager.getConnection();
-             Statement stmt = conn.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
+        try (java.sql.Connection conn = com.dam.audiodigital_tfg.db.DatabaseManager.getConnection();
+             java.sql.Statement stmt = conn.createStatement();
+             java.sql.ResultSet rs = stmt.executeQuery(sql)) {
+
             while (rs.next()) {
-                list.add(new SessionInfo(rs.getInt("id"), rs.getString("name")));
+                // Instancia
+                sessions.add(new SessionInfo(
+                        rs.getInt("id"),
+                        rs.getString("name"),
+                        rs.getInt("instrument_id") // Recuperamos el instrumento
+                ));
             }
-        } catch (SQLException e) {
+        } catch (java.sql.SQLException e) {
             e.printStackTrace();
         }
-        return list;
+        return sessions;
     }
 
-    public void saveSession(String sessionName, List<RecordedNote> notes) {
-        String insertSessionSQL = "INSERT INTO sessions (name) VALUES (?)";
-        String insertEventSQL = "INSERT INTO session_events (session_id, timestamp_ms, note, velocity, duration_ms, is_drum) VALUES (?, ?, ?, ?, ?, ?)";
+    public void saveSession(String sessionName, int instrumentId, java.util.List<com.dam.audiodigital_tfg.RecordedNote> notes) {
+        // Actualizamos el INSERT para incluir la columna instrument_id
+        String sqlInsertSession = "INSERT INTO sessions(name, instrument_id) VALUES(?, ?)";
 
-        try (Connection conn = DatabaseManager.getConnection()) {
-            conn.setAutoCommit(false); // Iniciamos transacción
+        try (java.sql.Connection conn = com.dam.audiodigital_tfg.db.DatabaseManager.getConnection();
+             java.sql.PreparedStatement pstmtSession = conn.prepareStatement(sqlInsertSession, java.sql.Statement.RETURN_GENERATED_KEYS)) {
 
-            try (PreparedStatement pstmtSess = conn.prepareStatement(insertSessionSQL, Statement.RETURN_GENERATED_KEYS)) {
-                pstmtSess.setString(1, sessionName);
-                pstmtSess.executeUpdate();
+            pstmtSession.setString(1, sessionName);
+            pstmtSession.setInt(2, instrumentId); // Guardamos el instrumento en la BD
+            pstmtSession.executeUpdate();
 
-                ResultSet rs = pstmtSess.getGeneratedKeys();
-                if (rs.next()) {
-                    int sessionId = rs.getInt(1);
+            java.sql.ResultSet rs = pstmtSession.getGeneratedKeys();
+            int sessionId = -1;
+            if (rs.next()) {
+                sessionId = rs.getInt(1);
+            }
 
-                    try (PreparedStatement pstmtNote = conn.prepareStatement(insertEventSQL)) {
-                        for (RecordedNote note : notes) {
-                            pstmtNote.setInt(1, sessionId);
-                            pstmtNote.setLong(2, note.timestampMs);
-                            pstmtNote.setInt(3, note.note);
-                            pstmtNote.setInt(4, note.velocity);
-                            pstmtNote.setInt(5, note.durationMs);
-                            pstmtNote.setBoolean(6, note.isDrum);
-                            pstmtNote.addBatch();
-                        }
-                        pstmtNote.executeBatch();
-                    }
+            // -------------------------------------------------------------
+            // CÓDIGO ORIGINAL PARA GUARDAR LAS NOTAS EN session_events
+            // -------------------------------------------------------------
+            String sqlInsertEvent = "INSERT INTO session_events(session_id, timestamp_ms, note, velocity, duration_ms, is_drum, channel) VALUES(?, ?, ?, ?, ?, ?, ?)";
+            try (java.sql.PreparedStatement pstmtEvent = conn.prepareStatement(sqlInsertEvent)) {
+                for (com.dam.audiodigital_tfg.RecordedNote note : notes) {
+                    pstmtEvent.setInt(1, sessionId);
+                    pstmtEvent.setLong(2, note.timestampMs);
+                    pstmtEvent.setInt(3, note.note);
+                    pstmtEvent.setInt(4, note.velocity);
+                    pstmtEvent.setInt(5, note.durationMs);
+                    pstmtEvent.setBoolean(6, note.isDrum);
+                    pstmtEvent.setInt(7, note.isDrum ? 9 : 0);
+                    pstmtEvent.addBatch();
                 }
-                conn.commit();
-                System.out.println("✅ Sesión '" + sessionName + "' guardada con " + notes.size() + " notas.");
-            } catch (SQLException e) {
-                conn.rollback();
-                e.printStackTrace();
+                pstmtEvent.executeBatch();
             }
-        } catch (SQLException e) {
+
+            System.out.println("Sesión guardada ");
+
+        } catch (java.sql.SQLException e) {
             e.printStackTrace();
         }
     }
+
     // Método para borrar una sesión y sus notas asociadas
     public void deleteSession(int sessionId) {
         String sql = "DELETE FROM sessions WHERE id = ?";
         try (java.sql.Connection conn = DatabaseManager.getConnection();
-             java.sql.PreparedStatement pstmt = conn.prepareStatement(sql)) {
+             java.sql.PreparedStatement ps = conn.prepareStatement(sql)) {
 
-            pstmt.setInt(1, sessionId);
-            int filasBorradas = pstmt.executeUpdate();
+            ps.setInt(1, sessionId);
+            int filasBorradas = ps.executeUpdate();
 
             if (filasBorradas > 0) {
-                System.out.println("✅ Sesión con ID " + sessionId + " borrada correctamente.");
+                System.out.println("Sesión con ID " + sessionId + " borrada correctamente.");
             }
         } catch (java.sql.SQLException e) {
-            System.err.println("❌ Error al borrar la sesión: " + e.getMessage());
+            System.err.println("Error al borrar la sesión: " + e.getMessage());
         }
     }
-
 }
