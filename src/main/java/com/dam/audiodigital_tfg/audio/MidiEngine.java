@@ -14,6 +14,9 @@ public class MidiEngine {
     private MidiChannel[] channels;
     private CppAudioBridge cppBridge = new CppAudioBridge();
 
+
+    private double[] trackVolumeFactors = {1.0, 1.0, 1.0, 1.0, 1.0};
+
     private boolean isSaturationEnabled = false;    // Por defecto apagado
     private float saturationDrive = 3.0f;           // La "fuerza" del efecto
 
@@ -112,9 +115,14 @@ public class MidiEngine {
         this.actionListener = listener;
     }
     // Método para cambiar volumen de un canal específico
+
     public void setChannelVolume(int channel, int volume) {
+        if (channel >= 0 && channel < trackVolumeFactors.length) {
+            trackVolumeFactors[channel] = volume / 127.0; // Guardamos el % del fader
+        }
+
         if (channels != null && channels.length > channel) {
-            channels[channel].controlChange(7, volume); // CC 7 = Volumen
+            channels[channel].controlChange(7, volume); // CC 7 = Volumen general
         }
     }
 
@@ -266,7 +274,7 @@ public class MidiEngine {
 
         // Log para confirmar qué le llega a C++
         if(isSaturationEnabled) {
-            System.out.println("🔥 Enviando Drive a C++: " + this.saturationDrive);
+            System.out.println(" Enviando Drive a C++: " + this.saturationDrive);
         }
     }
 
@@ -384,7 +392,7 @@ public class MidiEngine {
         // Vaciamos la memoria temporal
         activeNotes.clear();
 
-        System.out.println("⏹️ Grabación detenida. Notas capturadas en total: " + recordedNotes.size());
+        System.out.println("⏹ Grabación detenida. Notas capturadas en total: " + recordedNotes.size());
     }
 
     public java.util.List<RecordedNote> getRecordedNotes() {
@@ -457,7 +465,18 @@ public class MidiEngine {
                     // Lanzamos la nota
                     new Thread(() -> {
                         try {
-                            channels[channelIndex].noteOn(note.note, note.velocity);
+                            // Leemos cómo está el fader de ESTA pista concreta
+                            double factor = trackVolumeFactors[targetChannel];
+
+                            // Multiplicamos la fuerza original de la nota por el fader
+                            int adjustedVelocity = (int) (note.velocity * factor);
+
+                            // Nos aseguramos de que no se salga de los límites MIDI (0-127)
+                            adjustedVelocity = Math.max(0, Math.min(127, adjustedVelocity));
+
+                            // Lanzamos la nota con la fuerza ya recortada
+                            channels[channelIndex].noteOn(note.note, adjustedVelocity);
+
                             Thread.sleep(note.durationMs);
                             channels[channelIndex].noteOff(note.note);
                         } catch (InterruptedException e) {
