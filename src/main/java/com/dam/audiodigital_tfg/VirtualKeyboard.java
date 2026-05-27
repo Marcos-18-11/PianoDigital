@@ -24,6 +24,10 @@ public class VirtualKeyboard extends Application {
     private MidiEngine midiEngine;
     private MetronomeController metroController;
 
+    private boolean[] pistasArmadas = new boolean[5];
+
+    private Button[] botonesPlayMixer = new Button[5];
+    private Button globalPlayBtn;
     private int baseMidiNote = 60;
 
     private static final String WHITE_KEY_STYLE =
@@ -143,6 +147,11 @@ public class VirtualKeyboard extends Application {
         recBtn.setStyle("-fx-background-color: #ff4444; -fx-text-fill: white; -fx-font-weight: bold; -fx-cursor: hand;");
 
         Button stopBtn = new Button("⏹ STOP");
+
+        globalPlayBtn = new Button("🚀 PLAY SELECCIONADOS");
+        globalPlayBtn.setMaxWidth(Double.MAX_VALUE);
+        globalPlayBtn.setStyle("-fx-background-color: #00E676; -fx-text-fill: black; -fx-font-weight: bold; -fx-cursor: hand;");
+
         stopBtn.setMaxWidth(Double.MAX_VALUE);
         stopBtn.setDisable(true);
         stopBtn.setStyle("-fx-background-color: #555555; -fx-text-fill: white; -fx-cursor: hand;");
@@ -246,8 +255,8 @@ public class VirtualKeyboard extends Application {
             }
         });
 
-        leftTransport.getChildren().addAll(lblControles, new javafx.scene.control.Separator(), instrumentSelector, new javafx.scene.control.Separator(), recBtn, stopBtn, btnGestorGrabaciones, new javafx.scene.control.Separator(), btnMapeo, infoBocadillo);
-        root.setLeft(leftTransport);
+        leftTransport.getChildren().addAll(lblControles, new javafx.scene.control.Separator(), instrumentSelector, new javafx.scene.control.Separator(), recBtn, stopBtn, globalPlayBtn,
+                btnGestorGrabaciones, new javafx.scene.control.Separator(), btnMapeo, infoBocadillo);
 
         // =================
         // 4. ZONA CENTRAL
@@ -302,6 +311,9 @@ public class VirtualKeyboard extends Application {
             });
 
             Button playTrackBtn = new Button("▶");
+
+            botonesPlayMixer[channelIdx] = playTrackBtn;
+
             playTrackBtn.setMaxWidth(Double.MAX_VALUE);
             playTrackBtn.setDisable(true);
             playTrackBtn.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold;");
@@ -451,8 +463,14 @@ public class VirtualKeyboard extends Application {
         root.setRight(octaveControls);
 
         // =========================
-        // 6. PESTAÑAS Y SPLITPANE
+        // 6. PESTAÑAS Y LAYOUT (Capa Flotante)
         // =========================
+
+        // 1. Creamos un "fantasma" invisible para que el Piano y el Mixer no se escondan debajo del panel flotante
+        javafx.scene.layout.Region ghostSpace = new javafx.scene.layout.Region();
+        ghostSpace.setPrefWidth(100); // Ocupa el ancho de tu panel de controles
+        root.setLeft(ghostSpace);
+
         javafx.scene.control.TabPane tabPane = new javafx.scene.control.TabPane();
         tabPane.setStyle("-fx-tab-min-width: 120px; -fx-tab-min-height: 35px; -fx-font-weight: bold; -fx-background-color: #1e1e1e;");
 
@@ -469,17 +487,67 @@ public class VirtualKeyboard extends Application {
         metronomeIndicator.setAlignment(Pos.CENTER);
         metronomeIndicator.setStyle("-fx-background-color: #121212; -fx-text-fill: #00ffcc; -fx-font-weight: bold; -fx-font-size: 11px; -fx-padding: 5;");
 
+
+        javafx.scene.layout.AnchorPane capaFlotante = new javafx.scene.layout.AnchorPane();
+        // FUNDAMENTAL: Evita que la zona invisible bloquee los clics del ratón hacia el piano o las pestañas
+        capaFlotante.setPickOnBounds(false);
+
+        // Anclamos tu panel izquierdo a la capa flotante (bajándolo 45px para que no tape las pestañas)
+        javafx.scene.layout.AnchorPane.setTopAnchor(leftTransport, 150.0);
+        javafx.scene.layout.AnchorPane.setLeftAnchor(leftTransport, 15.0);
+
+        javafx.scene.layout.AnchorPane.setBottomAnchor(leftTransport, 15.0);
+
+        capaFlotante.getChildren().add(leftTransport);
+        // Apilamos todo: El TabPane al fondo, y la Capa Flotante encima
+        javafx.scene.layout.StackPane lowerWorkspace = new javafx.scene.layout.StackPane();
+        lowerWorkspace.getChildren().addAll(tabPane, capaFlotante);
+
         VBox bottomArea = new VBox();
-        bottomArea.getChildren().addAll(metronomeIndicator, tabPane);
+        bottomArea.getChildren().addAll(metronomeIndicator, lowerWorkspace);
+        javafx.scene.layout.VBox.setVgrow(lowerWorkspace, javafx.scene.layout.Priority.ALWAYS);
 
         javafx.scene.control.SplitPane splitPane = new javafx.scene.control.SplitPane();
         splitPane.setOrientation(javafx.geometry.Orientation.VERTICAL);
         splitPane.getItems().addAll(metronomeRoot, bottomArea);
         splitPane.setDividerPositions(0.35f);
 
-        // Dimensiones ampliadas para encajar el Mixer
 
-        Scene scene = new Scene(splitPane, 1250, 800);
+        // Configuración de la acción del botón global
+        globalPlayBtn.setOnAction(e -> {
+            boolean detectadoSonando = false;
+            for (int i = 1; i <= 4; i++) {
+                if (botonesPlayMixer[i] != null && botonesPlayMixer[i].getStyle().contains("#f44336")) {
+                    detectadoSonando = true;
+                    break;
+                }
+            }
+
+            if (!detectadoSonando) {
+                boolean seDisparoAlgo = false;
+                for (int i = 1; i <= 4; i++) {
+                    if (botonesPlayMixer[i] != null && botonesPlayMixer[i].getStyle().contains("#2196F3")) {
+                        botonesPlayMixer[i].fire();
+                        seDisparoAlgo = true;
+                    }
+                }
+                if (seDisparoAlgo) {
+                    globalPlayBtn.setText("⏹ STOP SELECCIONADOS");
+                    globalPlayBtn.setStyle("-fx-background-color: #f44336; -fx-text-fill: white; -fx-font-weight: bold;");
+                }
+            } else {
+                for (int i = 1; i <= 4; i++) {
+                    if (botonesPlayMixer[i] != null && java.util.Objects.requireNonNull(botonesPlayMixer[i].getStyle()).contains("#f44336")) {
+                        botonesPlayMixer[i].fire();
+                    }
+                }
+                globalPlayBtn.setText(" PLAY ALL SELECTED MIXERS");
+                globalPlayBtn.setStyle("-fx-background-color: #00E676; -fx-text-fill: black; -fx-font-weight: bold;");
+            }
+        });
+
+        //  Cargamos el SplitPane
+        Scene scene = new Scene(splitPane, 1450, 850);
 
         // =========================
         // 7. LISTENERS GLOBALES (Mapeo y Teclado)
