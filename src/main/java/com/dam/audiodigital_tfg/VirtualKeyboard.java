@@ -489,15 +489,22 @@ public class VirtualKeyboard extends Application {
 
 
         javafx.scene.layout.AnchorPane capaFlotante = new javafx.scene.layout.AnchorPane();
-        // FUNDAMENTAL: Evita que la zona invisible bloquee los clics del ratón hacia el piano o las pestañas
         capaFlotante.setPickOnBounds(false);
 
-        // Anclamos tu panel izquierdo a la capa flotante (bajándolo 45px para que no tape las pestañas)
-        javafx.scene.layout.AnchorPane.setTopAnchor(leftTransport, 150.0);
-        javafx.scene.layout.AnchorPane.setLeftAnchor(leftTransport, 15.0);
+        // 🚨 Creamos un ScrollPane invisible que envuelve a tu panel
+        javafx.scene.control.ScrollPane scrollFlotante = new javafx.scene.control.ScrollPane(leftTransport);
+        scrollFlotante.setFitToWidth(true);
+        // Le quitamos el fondo y los bordes para que mantenga tu estética flotante
+        scrollFlotante.setStyle("-fx-background-color: transparent; -fx-background: transparent; -fx-border-color: transparent;");
+        scrollFlotante.setVbarPolicy(javafx.scene.control.ScrollPane.ScrollBarPolicy.AS_NEEDED);
+        scrollFlotante.setHbarPolicy(javafx.scene.control.ScrollPane.ScrollBarPolicy.NEVER);
 
-        javafx.scene.layout.AnchorPane.setBottomAnchor(leftTransport, 15.0);
+        // Anclamos el ScrollPane en lugar del leftTransport
+        javafx.scene.layout.AnchorPane.setTopAnchor(scrollFlotante, 150.0);
+        javafx.scene.layout.AnchorPane.setLeftAnchor(scrollFlotante, 15.0);
+        javafx.scene.layout.AnchorPane.setBottomAnchor(scrollFlotante, 15.0);
 
+        capaFlotante.getChildren().add(scrollFlotante);
         capaFlotante.getChildren().add(leftTransport);
         // Apilamos todo: El TabPane al fondo, y la Capa Flotante encima
         javafx.scene.layout.StackPane lowerWorkspace = new javafx.scene.layout.StackPane();
