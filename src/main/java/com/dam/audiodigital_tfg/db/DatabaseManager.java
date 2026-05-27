@@ -18,34 +18,27 @@ public class DatabaseManager {
 
     public static void initDatabase() {
         try (Connection conn = getConnection(); Statement stmt = conn.createStatement()) {
-            // Aquí ejecutarías los CREATE TABLE mencionados arriba
-            String sqlMetronome = "CREATE TABLE IF NOT EXISTS metronome_presets (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, bpm INTEGER, ratio_a INTEGER, ratio_b INTEGER);";
-            stmt.execute(sqlMetronome);
 
-            String sqlKits = "CREATE TABLE IF NOT EXISTS drum_kits (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT UNIQUE);";
-            stmt.execute(sqlKits);
 
-            String sqlMappings = "CREATE TABLE IF NOT EXISTS drum_mappings (id INTEGER PRIMARY KEY AUTOINCREMENT, kit_id INTEGER, pad_index INTEGER, midi_note INTEGER, label TEXT);";
-            stmt.execute(sqlMappings);
-
-            System.out.println("Base de datos SQLite inicializada.");
-
-            // Tabla principal de la sesión
             String sqlSessions = "CREATE TABLE IF NOT EXISTS sessions (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP);";
             stmt.execute(sqlSessions);
 
-            // Tabla para guardar cada nota individual (El "Piano Roll")
-            String sqlEvents = "CREATE TABLE IF NOT EXISTS session_events (" +
-                    "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
-                    "session_id INTEGER, " +
-                    "timestamp_ms LONG, " +
-                    "note INTEGER, " +
-                    "velocity INTEGER, " +
-                    "duration_ms INTEGER, " +
-                    "is_drum BOOLEAN, " +
-                    "channel INTEGER DEFAULT 0, " + // <-- ESTO ES EL PUNTO 1
-                    "FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE);";
-            stmt.execute(sqlEvents);
+            //  FORZAR MIGRACIÓN: Comprobamos si la columna existe antes de insertar
+            try {
+                // Ejecutamos el alter de forma independiente
+
+                stmt.execute("ALTER TABLE sessions ADD COLUMN instrument_id INTEGER DEFAULT 0;");
+                System.out.println("✅Columna 'instrument_id' inyectada correctamente en la tabla 'sessions'.");
+            } catch (SQLException e) {
+                // Si salta aquí es porque la columna ya existe de verdad.
+                // Ignoramos el error silenciosamente.
+            }
+
+            // ... El resto de tablas ...
+            String sqlMetronome = "CREATE TABLE IF NOT EXISTS metronome_presets (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, bpm INTEGER, ratio_a INTEGER, ratio_b INTEGER);";
+            stmt.execute(sqlMetronome);
+
+
 
         } catch (SQLException e) {
             e.printStackTrace();

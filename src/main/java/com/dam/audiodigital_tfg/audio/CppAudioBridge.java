@@ -6,9 +6,9 @@ public class CppAudioBridge {
         try {
             // Carga la librería compilada (audio_dsp.dll)
             System.loadLibrary("audio_dsp");
-            System.out.println("✅ Módulo C++ (audio_dsp) cargado y listo para saturar.");
+            System.out.println("Aaudio_dsp cargado");
         } catch (UnsatisfiedLinkError e) {
-            System.err.println("⚠️ Error: No se pudo cargar la librería nativa C++.");
+            System.err.println("Error: No se pudo cargar la librería nativa C++.");
         }
     }
 

@@ -5,7 +5,7 @@ module com.dam.audiodigital_tfg {
     requires java.desktop;    // OBLIGATORIO: Aquí reside la API javax.sound.midi.
     requires java.sql;        // Para la futura gestión de la base de datos SQLite.
 
-    // OPENS: Da permiso a JavaFX para que "entre" en nuestro paquete.
+    // OPENS: Da permiso a JavaFX para que entre en nuestro paquete.
     // Sin esto, JavaFX no podría conectar los botones de la vista con el código.
     opens com.dam.audiodigital_tfg to javafx.fxml;
 

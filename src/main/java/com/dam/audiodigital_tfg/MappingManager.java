@@ -13,7 +13,7 @@ public class MappingManager {
     }
 
     // Diccionarios de mapeo
-    // Guarda: "SPACE" -> "ACTION_REC"
+
     private Map<String, String> pcMappings = new HashMap<>();
 
     // Guarda: 36 (Nota MIDI) -> "ACTION_PAD_KICK"
@@ -26,7 +26,7 @@ public class MappingManager {
             KeyCode.F6, KeyCode.F7, KeyCode.F8, KeyCode.F9, KeyCode.F10, KeyCode.F11, KeyCode.F12
     );
 
-    // Variables del "Learn Mode" (Modo de Aprendizaje)
+    // Variables del Modo de Aprendizaje
     private boolean isLearnMode = false;
     private String actionWaitingForMap = null; // Ej: "ACTION_REC"
 
@@ -45,7 +45,7 @@ public class MappingManager {
 
     public void setWaitingAction(String actionId) {
         this.actionWaitingForMap = actionId;
-        System.out.println("🎧 Esperando entrada (PC o MIDI) para vincular: " + actionId);
+        System.out.println(" Esperando entrada (PC o MIDI) para vincular: " + actionId);
     }
 
     public String getWaitingAction() {
@@ -56,14 +56,14 @@ public class MappingManager {
 
     public boolean mapPcKey(KeyCode code) {
         if (blacklist.contains(code)) {
-            System.out.println("⚠️ Tecla reservada por el sistema. Usa otra.");
+            System.out.println(" Tecla reservada por el sistema. Usa otra.");
             return false;
         }
         if (actionWaitingForMap != null) {
             pcMappings.put(code.toString(), actionWaitingForMap);
 
             mappingDAO.saveMapping("PC", code.toString(), actionWaitingForMap);
-            System.out.println("✅ Mapeado: Tecla [" + code + "] -> Acción [" + actionWaitingForMap + "]");
+            System.out.println(" Mapeado: Tecla [" + code + "] -> Acción [" + actionWaitingForMap + "]");
             actionWaitingForMap = null; // Limpiamos la espera
             return true;
         }
