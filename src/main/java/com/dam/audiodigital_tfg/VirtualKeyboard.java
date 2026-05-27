@@ -148,7 +148,7 @@ public class VirtualKeyboard extends Application {
 
         Button stopBtn = new Button("⏹ STOP");
 
-        globalPlayBtn = new Button("🚀 PLAY SELECCIONADOS");
+        globalPlayBtn = new Button(" PLAY ALL SELECTED MIXERS");
         globalPlayBtn.setMaxWidth(Double.MAX_VALUE);
         globalPlayBtn.setStyle("-fx-background-color: #00E676; -fx-text-fill: black; -fx-font-weight: bold; -fx-cursor: hand;");
 
@@ -376,7 +376,7 @@ public class VirtualKeyboard extends Application {
 
         VBox satBox = new VBox(5);
         satBox.setAlignment(Pos.CENTER);
-        ToggleButton btnSaturation = new ToggleButton("🔥 Saturación");
+        ToggleButton btnSaturation = new ToggleButton(" Saturación");
         btnSaturation.setStyle("-fx-background-color: #555555; -fx-text-fill: white; -fx-cursor: hand;");
         Slider satSlider = new Slider(0, 10, 0);
         satSlider.setPrefWidth(100);
@@ -491,7 +491,7 @@ public class VirtualKeyboard extends Application {
         javafx.scene.layout.AnchorPane capaFlotante = new javafx.scene.layout.AnchorPane();
         capaFlotante.setPickOnBounds(false);
 
-        // 🚨 Creamos un ScrollPane invisible que envuelve a tu panel
+        // Creamos un ScrollPane invisible que envuelve a tu panel
         javafx.scene.control.ScrollPane scrollFlotante = new javafx.scene.control.ScrollPane(leftTransport);
         scrollFlotante.setFitToWidth(true);
         // Le quitamos el fondo y los bordes para que mantenga tu estética flotante
